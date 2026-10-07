@@ -16,7 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const VEHICLE_TYPES = [
   { id: 'car',        label: 'Car',        icon: 'car'           },
@@ -113,8 +113,7 @@ export default function AddVehicle() {
     setSaving(true);
 
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Not Logged In', 'Please log in again before saving your vehicle.');
         return;
       }
@@ -135,13 +134,7 @@ export default function AddVehicle() {
       };
 
       if (isEdit) {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .update(payload)
-          .eq('id', vehicleToEdit.id)
-          .eq('user_id', user.id)
-          .select()
-          .single();
+        const { data, error } = await api.update('vehicles', vehicleToEdit.id, payload);
 
         if (error) {
           Alert.alert('Save Failed', error.message);
@@ -159,11 +152,10 @@ export default function AddVehicle() {
           },
         ]);
       } else {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .insert({ ...payload, user_id: user.id, current_mileage: 0 })
-          .select()
-          .single();
+        const { data, error } = await api.create('vehicles', {
+          ...payload,
+          current_mileage: 0,
+        });
 
         if (error) {
           Alert.alert('Save Failed', error.message);

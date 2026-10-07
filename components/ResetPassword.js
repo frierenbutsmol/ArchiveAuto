@@ -6,6 +6,7 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
+  TouchableNativeFeedback,
   StyleSheet,
   StatusBar,
   ScrollView,
@@ -15,7 +16,37 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
+
+// Gives touchables a real Material ripple on Android; falls back to
+// opacity dimming on iOS.
+function Touchable({ onPress, style, children, rippleColor, borderless = false, hitSlop, disabled }) {
+  if (Platform.OS === 'android') {
+    return (
+      <TouchableNativeFeedback
+        onPress={onPress}
+        disabled={disabled}
+        background={TouchableNativeFeedback.Ripple(
+          rippleColor || 'rgba(255,255,255,0.15)',
+          borderless
+        )}>
+        <View style={style} hitSlop={hitSlop}>
+          {children}
+        </View>
+      </TouchableNativeFeedback>
+    );
+  }
+  return (
+    <TouchableOpacity
+      style={style}
+      activeOpacity={0.85}
+      onPress={onPress}
+      hitSlop={hitSlop}
+      disabled={disabled}>
+      {children}
+    </TouchableOpacity>
+  );
+}
 
 export default function ResetPassword({ navigation }) {
   const [email, setEmail] = useState('');
@@ -23,29 +54,18 @@ export default function ResetPassword({ navigation }) {
 
   const handleSendResetLink = async () => {
     if (!email.trim()) {
-      Alert.alert(
-        'Email Required',
-        'Please enter your email address.'
-      );
+      Alert.alert('Email Required', 'Please enter your email address.');
       return;
     }
 
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      email.trim(),
-      {
-        redirectTo: 'archiveauto://reset-password',
-      }
-    );
+    const { error } = await api.auth.forgotPassword(email.trim());
 
     setLoading(false);
 
     if (error) {
-      Alert.alert(
-        'Reset Password Failed',
-        error.message
-      );
+      Alert.alert('Reset Password Failed', error.message);
       return;
     }
 
@@ -61,12 +81,17 @@ export default function ResetPassword({ navigation }) {
     );
   };
 
+  const handleReturnToLogin = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('SignIn');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={COLORS.background}
-      />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
@@ -75,7 +100,6 @@ export default function ResetPassword({ navigation }) {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           bounces={false}>
-
           {/* Header card */}
           <View style={styles.headerCard}>
             <Image
@@ -87,29 +111,17 @@ export default function ResetPassword({ navigation }) {
             <View style={styles.headerGradientOverlay} />
 
             <View style={styles.headerContent}>
-              <TouchableOpacity
+              <Touchable
                 style={styles.backButton}
-                onPress={() =>
-                  navigation.canGoBack() && navigation.goBack()
-                }
-                hitSlop={{
-                  top: 10,
-                  bottom: 10,
-                  left: 10,
-                  right: 10,
-                }}>
-                <Ionicons
-                  name="chevron-back"
-                  size={22}
-                  color={COLORS.textPrimary}
-                />
-              </TouchableOpacity>
+                onPress={handleReturnToLogin}
+                borderless
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="chevron-back" size={22} color={COLORS.textPrimary} />
+              </Touchable>
 
-              <Text style={styles.brandBadge}>AUTOCARE</Text>
+              <Text style={styles.brandBadge}>ARCHIVEAUTO</Text>
 
-              <Text style={styles.title}>
-                Forgot password
-              </Text>
+              <Text style={styles.title}>Forgot password</Text>
 
               <Text style={styles.subtitle}>
                 Enter your email to receive a password reset link
@@ -119,9 +131,7 @@ export default function ResetPassword({ navigation }) {
 
           {/* Form */}
           <View style={styles.form}>
-            <Text style={styles.label}>
-              Email address
-            </Text>
+            <Text style={styles.label}>Email address</Text>
 
             <View style={styles.inputRow}>
               <Ionicons
@@ -144,26 +154,23 @@ export default function ResetPassword({ navigation }) {
             </View>
 
             <Text style={styles.infoText}>
-              We'll send a link to your email that will let you
-              create a new password.
+              We'll send a link to your email that will let you create a new password.
             </Text>
 
-            <TouchableOpacity
-              style={[
-                styles.ctaButton,
-                loading && styles.ctaButtonDisabled,
-              ]}
+            <Touchable
+              style={[styles.ctaButton, loading && styles.ctaButtonDisabled]}
               onPress={handleSendResetLink}
-              activeOpacity={0.85}
-              disabled={loading}>
-              <Text style={styles.ctaText}>
-                {loading
-                  ? 'Sending...'
-                  : 'Send Reset Link'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              disabled={loading}
+              rippleColor="rgba(0,0,0,0.15)">
+              <Text style={styles.ctaText}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
+            </Touchable>
 
+            <View style={styles.footerRow}>
+              <Touchable onPress={handleReturnToLogin} style={styles.footerLinkWrap} borderless>
+                <Text style={styles.footerLink}>Return to Login</Text>
+              </Touchable>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -296,6 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: SPACING.xxxl,
+    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -319,14 +327,15 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xxl,
   },
 
-  footerText: {
-    color: COLORS.textMuted,
-    fontSize: 13,
+  footerLinkWrap: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
 
   footerLink: {
-    color: COLORS.primary,
+    color: COLORS.textMuted,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

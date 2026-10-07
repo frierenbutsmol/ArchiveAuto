@@ -3,6 +3,7 @@ import {
   SafeAreaView,
   View,
   Text,
+  Image,
   StyleSheet,
   StatusBar,
   ScrollView,
@@ -12,7 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -20,6 +21,7 @@ export default function ProfileScreen() {
   const [user, setUser] = useState({
     name: 'Loading...',
     email: '',
+    avatarUrl: null,
     vehiclesCount: 0,
     recordsCount: 0,
   });
@@ -30,39 +32,25 @@ export default function ProfileScreen() {
 
   const loadProfile = async () => {
     try {
-      const {
-        data: { user: authUser },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const { data: authData, error: userError } = await api.auth.getUser();
+      const authUser = authData?.user;
 
       if (userError || !authUser) {
         console.log('Failed to get user:', userError?.message);
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', authUser.id)
-        .single();
-
-      if (profileError) {
-        console.log('Failed to get profile:', profileError.message);
-      }
-
-      const { count: vehiclesCount, error: vehiclesError } = await supabase
-        .from('vehicles')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', authUser.id);
+      const { data: vehicles, error: vehiclesError } = await api.list('vehicles');
 
       if (vehiclesError) {
         console.log('Failed to get vehicle count:', vehiclesError.message);
       }
 
       setUser({
-        name: profile?.display_name || 'User',
+        name: authUser.display_name || 'User',
         email: authUser.email || '',
-        vehiclesCount: vehiclesCount || 0,
+        avatarUrl: authUser.avatar_url || null,
+        vehiclesCount: vehicles?.length || 0,
         recordsCount: 0,
       });
     } catch (error) {
@@ -71,7 +59,7 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await api.auth.signOut();
 
     if (error) {
       Alert.alert('Sign Out Failed', error.message);
@@ -95,7 +83,7 @@ export default function ProfileScreen() {
       id: 'faq',
       icon: 'help-circle-outline',
       label: 'Help & ArchiveAuto FAQ',
-      onPress: () => console.log('FAQ pressed'),
+      onPress: () => navigation.navigate('Info', { page: 'faq' }),
     },
     {
       id: 'logout',
@@ -122,7 +110,11 @@ export default function ProfileScreen() {
         {/* Profile Card: Name and email only, 2 stats (Vehicles & Records) */}
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}>
-            <Ionicons name="person" size={32} color={COLORS.primary} />
+            {user.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={32} color={COLORS.primary} />
+            )}
           </View>
 
           <Text style={styles.userName}>{user.name}</Text>
@@ -242,6 +234,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.md,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   userName: {
     color: COLORS.textPrimary,

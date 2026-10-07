@@ -15,7 +15,17 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api } from '../lib/api';
+import * as DocumentPicker from 'expo-document-picker';
+
+const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
+const PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const mimeFromName = (name = '') => {
+  const ext = name.split('.').pop().toLowerCase();
+  return ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
+};
 
 const REPAIR_TYPES = [
   { id: 'DIY',                  label: 'DIY',                   requiresProof: false },
@@ -51,6 +61,7 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
 }
 
 export default function AddRepair({ navigation, route }) {
+  const { useMetric } = useSettings();
   const insets = useSafeAreaInsets();
 
   const vehicle =
@@ -62,7 +73,8 @@ export default function AddRepair({ navigation, route }) {
   const [shopName,    setShopName]    = useState('');
   const [odometer,    setOdometer]    = useState('');
   const [cost,        setCost]        = useState('');
-  const [hasPhoto,    setHasPhoto]    = useState(false);
+  const [proofFile,   setProofFile]   = useState(null);   // picked receipt / work order
+  const hasPhoto = !!proofFile;
   const [notes,       setNotes]       = useState('');
   const [saving,      setSaving]      = useState(false);
   const [focusedField, setFocusedField] = useState(null);
@@ -74,6 +86,37 @@ export default function AddRepair({ navigation, route }) {
     title.trim() !== '' &&
     odometer.trim() !== '' &&
     (!requiresProof || hasPhoto);
+
+  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  const pickProof = async () => {
+    if (proofFile) {
+      setProofFile(null);
+      return;
+    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: PROOF_TYPES,
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file) return;
+
+      const mime = PROOF_TYPES.includes(file.mimeType) ? file.mimeType : mimeFromName(file.name);
+      if (!mime) {
+        Alert.alert('Unsupported File', 'Please choose a JPG, PNG or PDF.');
+        return;
+      }
+      if (file.size && file.size > MAX_PROOF_BYTES) {
+        Alert.alert('File Too Large', 'Please choose a file under 8 MB.');
+        return;
+      }
+      setProofFile({ ...file, mime });
+    } catch {
+      Alert.alert('File Selection Failed', 'Could not select the file.');
+    }
+  };
 
   const handleSave = async () => {
     if (!canSave || saving) return;
@@ -93,34 +136,40 @@ export default function AddRepair({ navigation, route }) {
 
     setSaving(true);
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Error', 'You must be logged in to save a repair record.');
         return;
       }
 
-      const { data, error } = await supabase
-        .from('repairs')
-        .insert({
+      let proofId = null;
+      if (proofFile) {
+        const upload = await api.files.upload(proofFile.uri, { mime: proofFile.mime, name: proofFile.name });
+        if (upload.error) {
+          Alert.alert('Upload Failed', upload.error.message);
+          return;
+        }
+        proofId = upload.data.id;
+      }
+
+      const { error } = await api.create('repairs', {
           vehicle_id:      vehicle.id,
           repair_type:     repairType,
           description:     title.trim(),
           repair_date:     new Date().toISOString().split('T')[0],
-          mileage:         mileageValue,
+          mileage:         displayToKm(mileageValue, useMetric),
           cost:            Number.isNaN(costValue) ? null : costValue,
           shop_name:       shopName.trim() || null,
-          proof_file_path: null,
+          proof_file_path: proofId,
+          proof_file_name: proofFile?.name || null,
           notes:           notes.trim() || null,
-        })
-        .select()
-        .single();
+      });
 
       if (error) {
+        if (proofId) await api.files.remove(proofId);   // don't leave an orphan upload behind
         Alert.alert('Save Failed', error.message || 'Could not save the repair record.');
         return;
       }
 
-      console.log('Repair saved:', data);
       Alert.alert('Repair Saved', 'Your repair record has been added.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -230,7 +279,7 @@ export default function AddRepair({ navigation, route }) {
           <View style={styles.row}>
             <View style={[styles.fieldBlock, styles.rowField]}>
               <Text style={styles.fieldLabel}>
-                Odometer (km) <Text style={styles.requiredAsterisk}>*</Text>
+                Odometer ({distanceUnit(useMetric)}) <Text style={styles.requiredAsterisk}>*</Text>
               </Text>
               <TextInput
                 style={[styles.input, focusedField === 'odometer' && styles.inputFocused]}
@@ -284,7 +333,7 @@ export default function AddRepair({ navigation, route }) {
                 hasPhoto && styles.uploadBoxAttached,
                 requiresProof && !hasPhoto && styles.uploadBoxRequired,
               ]}
-              onPress={() => setHasPhoto((p) => !p)}
+              onPress={pickProof}
               rippleColor="rgba(255,255,255,0.06)"
             >
               <View style={styles.uploadBoxInner}>
@@ -295,8 +344,8 @@ export default function AddRepair({ navigation, route }) {
                 />
                 <Text style={[styles.uploadTitle, hasPhoto && { color: COLORS.success }]}>
                   {hasPhoto
-                    ? 'Receipt Photo Attached'
-                    : 'Tap to Take Photo or Attach Receipt'}
+                    ? proofFile.name || 'Receipt Attached'
+                    : 'Tap to Attach Receipt Photo or PDF'}
                 </Text>
                 <Text style={styles.uploadHint}>
                   {hasPhoto

@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api, sortDesc } from '../lib/api';
 
 export default function VehicleDocuments({ navigation }) {
   const route = useRoute();
@@ -34,46 +34,15 @@ export default function VehicleDocuments({ navigation }) {
     try {
       setLoading(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        Alert.alert('Error', 'You are not logged in.');
-        return;
-      }
-
       let selectedVehicle = vehicle;
-
       if (!selectedVehicle?.id) {
-        const {
-          data: vehicleData,
-          error: vehicleError,
-        } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
+        const { data: first, error: vehicleError } = await api.firstVehicle();
         if (vehicleError) {
-          console.error(
-            'Vehicle load error:',
-            vehicleError
-          );
-
-          Alert.alert(
-            'Error',
-            'Failed to load vehicle.'
-          );
-
+          Alert.alert('Error', vehicleError.message || 'Failed to load vehicle.');
           return;
         }
-
-        selectedVehicle = vehicleData;
-        setVehicle(vehicleData);
+        selectedVehicle = first;
+        setVehicle(first);
       }
 
       if (!selectedVehicle?.id) {
@@ -81,39 +50,14 @@ export default function VehicleDocuments({ navigation }) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('vehicle_id', selectedVehicle.id)
-        .order('created_at', {
-          ascending: false,
-        });
-
+      const { data, error } = await api.list('documents', { vehicle_id: selectedVehicle.id });
       if (error) {
-        console.error(
-          'Document load error:',
-          error
-        );
-
-        Alert.alert(
-          'Error',
-          'Failed to load vehicle documents.'
-        );
-
+        Alert.alert('Error', error.message || 'Failed to load vehicle documents.');
         return;
       }
-
-      setDocuments(data || []);
-    } catch (error) {
-      console.error(
-        'Load documents error:',
-        error
-      );
-
-      Alert.alert(
-        'Error',
-        'Something went wrong while loading documents.'
-      );
+      setDocuments(sortDesc(data, 'created_at'));
+    } catch {
+      Alert.alert('Error', 'Something went wrong while loading documents.');
     } finally {
       setLoading(false);
     }
@@ -149,7 +93,7 @@ export default function VehicleDocuments({ navigation }) {
     if (daysRemaining < 0) {
       return {
         text: 'Expired',
-        color: COLORS.error,
+        color: COLORS.danger,
       };
     }
 
@@ -189,52 +133,11 @@ export default function VehicleDocuments({ navigation }) {
 
   const handleViewDocument = async (filePath) => {
     if (!filePath) {
-      Alert.alert(
-        'Unavailable',
-        'This document does not have a file attached.'
-      );
-
+      Alert.alert('Unavailable', 'This document does not have a file attached.');
       return;
     }
-
-    try {
-      const { data, error } =
-        await supabase.storage
-          .from('archiveauto-files')
-          .createSignedUrl(
-            filePath,
-            60 * 5
-          );
-
-      if (error || !data?.signedUrl) {
-        console.error(
-          'Signed URL error:',
-          error
-        );
-
-        Alert.alert(
-          'Unable to Open',
-          'Could not create a link for this document.'
-        );
-
-        return;
-      }
-
-      const Linking =
-        require('react-native').Linking;
-
-      await Linking.openURL(data.signedUrl);
-    } catch (error) {
-      console.error(
-        'View document error:',
-        error
-      );
-
-      Alert.alert(
-        'Unable to Open',
-        'Something went wrong while opening the document.'
-      );
-    }
+    const { error } = await api.files.open(filePath);
+    if (error) Alert.alert('Unable to Open', error.message || 'Could not open this document.');
   };
 
   const getFileName = (filePath) => {
@@ -251,7 +154,7 @@ export default function VehicleDocuments({ navigation }) {
   const getDocumentTitle = (doc) => {
     return (
       doc.notes ||
-      getFileName(doc.file_path) ||
+      (doc.file_name || getFileName(doc.file_path)) ||
       'Vehicle Document'
     );
   };
@@ -455,9 +358,7 @@ export default function VehicleDocuments({ navigation }) {
                       <Text
                         style={styles.metaText}
                         numberOfLines={1}>
-                        {getFileName(
-                          doc.file_path
-                        )}
+                        {(doc.file_name || getFileName(doc.file_path))}
                       </Text>
                     </View>
                   </View>

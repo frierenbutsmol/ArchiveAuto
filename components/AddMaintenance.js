@@ -15,30 +15,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { supabase } from '../lib/supabase';
-
-// Colors pulled from the AutoCare design tokens (tailwind config)
-const C = {
-  background: '#141316',
-  surfaceContainerHigh: '#2b292d',
-  surfaceContainerLow: '#1c1b1e',
-  surfaceContainerHighest: '#363437',
-  outline: '#849495',
-  outlineVariant: '#3a494b',
-  primaryContainer: '#00f2ff',
-  onSurface: '#e6e1e5',
-  onSurfaceVariant: '#b9cacb',
-};
-
-// Material-style app bar surface: a tonal step lighter than the page
-// background rather than a hard border, so it reads as elevated.
-const APPBAR_SURFACE = C.surfaceContainerHigh;
+import { COLORS, SPACING, RADII } from '../constants/theme';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api } from '../lib/api';
 
 // Fixed height of the app bar itself (status bar space is added via marginTop).
 const TOP_BAR_HEIGHT = 64;
 
-// Change to 'mi' if you track mileage in miles.
-const MILEAGE_UNIT = 'km';
 
 const SERVICE_TYPES = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery', 'Other'];
 
@@ -91,7 +75,10 @@ export default function AddMaintenance() {
 
   const vehicle = route?.params?.vehicle || route?.params?.selectedVehicle;
 
-  const [serviceType, setServiceType] = useState('Oil Change');
+  const { useMetric } = useSettings();
+  const MILEAGE_UNIT = distanceUnit(useMetric);
+  // The Alerts screen can open this form pre-set to a service type.
+  const [serviceType, setServiceType] = useState(route?.params?.serviceType || 'Oil Change');
   const [taskName, setTaskName] = useState('');
   const [date, setDate] = useState(todayISO());
   const [mileage, setMileage] = useState('');
@@ -135,33 +122,24 @@ export default function AddMaintenance() {
     setSaving(true);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Error', 'You must be logged in to save a maintenance record.');
         return;
       }
 
-      const { data, error } = await supabase
-        .from('maintenance_records')
-        .insert({
+      const { data, error } = await api.create('maintenance_records', {
           vehicle_id: vehicle.id,
           maintenance_type: serviceType,
           description: taskName.trim(),
           service_date: serviceDate,
-          mileage: mileageValue,
+          mileage: displayToKm(mileageValue, useMetric),
           cost: Number.isNaN(costValue) ? null : costValue,
           shop_name: shopName.trim() || null,
           notes: notes.trim() || null,
           // Only sent when filled in, so saving still works if the
           // `parts_replaced` column hasn't been added to the table yet.
           ...(partsReplaced.trim() ? { parts_replaced: partsReplaced.trim() } : {}),
-        })
-        .select()
-        .single();
+      });
 
       if (error) {
         console.error('Maintenance save error:', error);
@@ -197,7 +175,7 @@ export default function AddMaintenance() {
           borderless
           rippleColor="rgba(255,255,255,0.15)"
         >
-          <MaterialIcons name="arrow-back" size={24} color={C.onSurfaceVariant} />
+          <MaterialIcons name="arrow-back" size={24} color={COLORS.textMuted} />
         </Touchable>
         <Text style={styles.headerTitle}>Add Record</Text>
         <View style={styles.headerSpacer} />
@@ -215,7 +193,7 @@ export default function AddMaintenance() {
           {/* Icon + subtitle */}
           <View style={styles.introBlock}>
             <View style={styles.iconCircle}>
-              <MaterialIcons name="build" size={32} color={C.primaryContainer} />
+              <MaterialIcons name="build" size={32} color={COLORS.primary} />
             </View>
             <Text style={styles.introText}>Log maintenance details for your vehicle.</Text>
           </View>
@@ -233,7 +211,7 @@ export default function AddMaintenance() {
                       key={type}
                       style={[styles.chip, selected && styles.chipActive]}
                       onPress={() => setServiceType(type)}
-                      rippleColor="rgba(0, 242, 255, 0.15)"
+                      rippleColor="rgba(55, 194, 223, 0.15)"
                     >
                       <View style={styles.chipInner}>
                         <Text style={[styles.chipText, selected && styles.chipTextActive]}>
@@ -254,13 +232,13 @@ export default function AddMaintenance() {
               <TextInput
                 style={[styles.input, focusedField === 'taskName' && styles.inputFocused]}
                 placeholder="e.g., Fully Synthetic Oil Change"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={COLORS.textMuted}
                 value={taskName}
                 onChangeText={setTaskName}
                 onFocus={() => setFocusedField('taskName')}
                 onBlur={() => setFocusedField(null)}
                 underlineColorAndroid="transparent"
-                selectionColor={C.primaryContainer}
+                selectionColor={COLORS.primary}
               />
             </View>
 
@@ -270,7 +248,7 @@ export default function AddMaintenance() {
               <TextInput
                 style={[styles.input, focusedField === 'date' && styles.inputFocused]}
                 placeholder="YYYY-MM-DD"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={COLORS.textMuted}
                 value={date}
                 onChangeText={setDate}
                 onFocus={() => setFocusedField('date')}
@@ -278,7 +256,7 @@ export default function AddMaintenance() {
                 keyboardType="numbers-and-punctuation"
                 maxLength={10}
                 underlineColorAndroid="transparent"
-                selectionColor={C.primaryContainer}
+                selectionColor={COLORS.primary}
               />
             </View>
 
@@ -296,14 +274,14 @@ export default function AddMaintenance() {
                       focusedField === 'mileage' && styles.inputFocused,
                     ]}
                     placeholder="24500"
-                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    placeholderTextColor={COLORS.textMuted}
                     value={mileage}
                     onChangeText={(text) => setMileage(text.replace(/[^0-9]/g, ''))}
                     onFocus={() => setFocusedField('mileage')}
                     onBlur={() => setFocusedField(null)}
                     keyboardType="numeric"
                     underlineColorAndroid="transparent"
-                    selectionColor={C.primaryContainer}
+                    selectionColor={COLORS.primary}
                   />
                   <Text style={styles.mileageUnit}>{MILEAGE_UNIT}</Text>
                 </View>
@@ -314,14 +292,14 @@ export default function AddMaintenance() {
                 <TextInput
                   style={[styles.input, focusedField === 'cost' && styles.inputFocused]}
                   placeholder="2500"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  placeholderTextColor={COLORS.textMuted}
                   value={cost}
                   onChangeText={(text) => setCost(text.replace(/[^0-9.]/g, ''))}
                   onFocus={() => setFocusedField('cost')}
                   onBlur={() => setFocusedField(null)}
                   keyboardType="decimal-pad"
                   underlineColorAndroid="transparent"
-                  selectionColor={C.primaryContainer}
+                  selectionColor={COLORS.primary}
                 />
               </View>
             </View>
@@ -332,13 +310,13 @@ export default function AddMaintenance() {
               <TextInput
                 style={[styles.input, focusedField === 'shopName' && styles.inputFocused]}
                 placeholder="e.g., Shell Helix Oil Service Center"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={COLORS.textMuted}
                 value={shopName}
                 onChangeText={setShopName}
                 onFocus={() => setFocusedField('shopName')}
                 onBlur={() => setFocusedField(null)}
                 underlineColorAndroid="transparent"
-                selectionColor={C.primaryContainer}
+                selectionColor={COLORS.primary}
               />
             </View>
 
@@ -348,13 +326,13 @@ export default function AddMaintenance() {
               <TextInput
                 style={[styles.input, focusedField === 'partsReplaced' && styles.inputFocused]}
                 placeholder="e.g., Oil filter, Brake pads"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={COLORS.textMuted}
                 value={partsReplaced}
                 onChangeText={setPartsReplaced}
                 onFocus={() => setFocusedField('partsReplaced')}
                 onBlur={() => setFocusedField(null)}
                 underlineColorAndroid="transparent"
-                selectionColor={C.primaryContainer}
+                selectionColor={COLORS.primary}
               />
             </View>
 
@@ -364,20 +342,20 @@ export default function AddMaintenance() {
               <TextInput
                 style={styles.textarea}
                 placeholder="Details on oil grade, filter brand, or recommendations..."
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={COLORS.textMuted}
                 value={notes}
                 onChangeText={setNotes}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
                 underlineColorAndroid="transparent"
-                selectionColor={C.primaryContainer}
+                selectionColor={COLORS.primary}
               />
             </View>
 
             {/* Info banner */}
             <View style={styles.infoBanner}>
-              <MaterialIcons name="info" size={20} color={C.primaryContainer} />
+              <MaterialIcons name="info" size={20} color={COLORS.primary} />
               <Text style={styles.infoText}>
                 This record will be added to your vehicle's history log.
               </Text>
@@ -394,7 +372,7 @@ export default function AddMaintenance() {
             rippleColor="rgba(0,0,0,0.15)"
           >
             <View style={styles.submitButtonInner}>
-              <MaterialIcons name="add-circle" size={20} color="#121212" />
+              <MaterialIcons name="add-circle" size={20} color={COLORS.textInverse} />
               <Text style={styles.submitButtonText}>
                 {saving ? 'Saving...' : 'Add Record'}
               </Text>
@@ -417,7 +395,7 @@ export default function AddMaintenance() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: COLORS.background,
   },
   flex: {
     flex: 1,
@@ -429,8 +407,8 @@ const styles = StyleSheet.create({
     height: TOP_BAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    backgroundColor: APPBAR_SURFACE,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surfaceElevated,
     zIndex: 10,
     ...Platform.select({
       android: { elevation: 8 },
@@ -452,7 +430,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 20,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
@@ -461,96 +439,96 @@ const styles = StyleSheet.create({
     width: 40,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 24,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xxxl,
+    paddingBottom: SPACING.xxl,
   },
   introBlock: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: SPACING.xxl,
   },
   iconCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: C.surfaceContainerHigh,
+    backgroundColor: COLORS.surfaceElevated,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
     borderWidth: 1,
-    borderColor: 'rgba(58,73,75,0.3)',
+    borderColor: COLORS.borderLight,
   },
   introText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
   },
   formCard: {
-    backgroundColor: C.surfaceContainerHigh,
-    borderRadius: 16,
-    padding: 16,
-    gap: 16,
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADII.card,
+    padding: SPACING.lg,
+    gap: SPACING.lg,
     ...Platform.select({ android: { elevation: 1 } }),
   },
   fieldBlock: {
-    gap: 8,
+    gap: SPACING.sm,
   },
   twoColumnRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: SPACING.lg,
   },
   column: {
     flex: 1,
   },
   fieldLabel: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   requiredAsterisk: {
-    color: C.primaryContainer,
+    color: COLORS.primary,
   },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: SPACING.sm,
   },
   chip: {
-    borderRadius: 999,
-    backgroundColor: C.surfaceContainerLow,
+    borderRadius: RADII.full,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: C.outlineVariant,
+    borderColor: COLORS.borderLight,
   },
   chipActive: {
-    backgroundColor: 'rgba(0, 242, 255, 0.1)',
-    borderColor: C.primaryContainer,
+    backgroundColor: COLORS.primaryMuted,
+    borderColor: COLORS.primary,
   },
   chipInner: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
   },
   chipText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: '600',
   },
   chipTextActive: {
-    color: C.primaryContainer,
+    color: COLORS.primary,
   },
   input: {
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 16,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
     paddingHorizontal: 0,
     borderBottomWidth: 1,
-    borderBottomColor: C.outline,
+    borderBottomColor: COLORS.border,
   },
   inputFocused: {
     borderBottomWidth: 2,
-    borderBottomColor: C.primaryContainer,
+    borderBottomColor: COLORS.primary,
   },
   mileageRow: {
     flexDirection: 'row',
@@ -560,50 +538,50 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   mileageUnit: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 16,
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
   },
   textarea: {
-    backgroundColor: C.surfaceContainerHighest,
+    backgroundColor: COLORS.surfaceSubtle,
     borderWidth: 1,
-    borderColor: C.outlineVariant,
-    borderRadius: 12,
-    color: C.onSurface,
+    borderColor: COLORS.borderLight,
+    borderRadius: RADII.md,
+    color: COLORS.textPrimary,
     fontSize: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md - 2,
     minHeight: 80,
   },
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: C.surfaceContainerLow,
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: 'rgba(58,73,75,0.5)',
-    borderRadius: 12,
-    padding: 12,
+    borderColor: COLORS.borderLight,
+    borderRadius: RADII.md,
+    padding: SPACING.md,
     marginTop: 4,
   },
   infoText: {
     flex: 1,
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 12,
     lineHeight: 16,
   },
   actionArea: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
-    paddingTop: 8,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: Platform.OS === 'ios' ? SPACING.xxl : SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   submitButton: {
-    borderRadius: 999,
-    backgroundColor: C.primaryContainer,
+    borderRadius: RADII.full,
+    backgroundColor: COLORS.primary,
     ...Platform.select({
       android: { elevation: 3 },
       ios: {
-        shadowColor: C.primaryContainer,
+        shadowColor: COLORS.primary,
         shadowOpacity: 0.35,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },
@@ -617,11 +595,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.lg,
   },
   submitButtonText: {
-    color: '#121212',
+    color: COLORS.textInverse,
     fontSize: 16,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
@@ -630,10 +608,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     marginTop: 4,
-    borderRadius: 8,
+    borderRadius: RADII.sm,
   },
   cancelButtonText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },

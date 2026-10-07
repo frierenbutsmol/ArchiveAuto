@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -12,11 +11,14 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api } from '../lib/api';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
 
@@ -54,6 +56,7 @@ const Touchable = ({
 };
 
 export default function HomeScreen({ navigation, route }) {
+  const { useMetric } = useSettings();
   const selected = route?.params?.selectedVehicle;
 
   const [currentVehicle, setCurrentVehicle] = useState(null);
@@ -94,20 +97,6 @@ export default function HomeScreen({ navigation, route }) {
     setLoading(true);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        console.log(
-          'Failed to get current user:',
-          userError?.message
-        );
-        setLoading(false);
-        return;
-      }
-
       let vehicle = selected;
 
       // If Home was opened without a selected vehicle,
@@ -135,72 +124,32 @@ export default function HomeScreen({ navigation, route }) {
         }
       }
 
-      // If there is still no selected vehicle,
-      // get the user's first vehicle from the database.
-      if (!vehicle?.id) {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', {
-            ascending: true,
-          })
-          .limit(1)
-          .single();
+      // Load the user's vehicles (oldest first) and make sure the selected
+      // vehicle is the current database version. If it was deleted, or none
+      // was selected, fall back to the first vehicle.
+      const { data: vehicleRows, error: vehiclesError } = await api.list('vehicles');
 
-        if (error) {
-          if (error.code !== 'PGRST116') {
-            console.log(
-              'Failed to load vehicle:',
-              error.message
-            );
-          }
+      if (vehiclesError) {
+        console.log('Failed to load vehicle:', vehiclesError.message);
+        setCurrentVehicle(null);
+        setLoading(false);
+        return;
+      }
 
-          setCurrentVehicle(null);
-          setLoading(false);
-          return;
-        }
+      const orderedVehicles = [...(vehicleRows || [])].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
 
-        vehicle = data;
-      } else {
-        // Make sure the selected vehicle is the current
-        // database version.
-        const { data, error } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('id', vehicle.id)
-          .eq('user_id', user.id)
-          .single();
+      const currentMatch = vehicle?.id
+        ? orderedVehicles.find((v) => v.id === vehicle.id)
+        : null;
 
-        if (!error && data) {
-          vehicle = data;
-        } else if (error) {
-          // The previously selected vehicle may have
-          // been deleted. Fall back to the first vehicle.
-          console.log(
-            'Selected vehicle could not be loaded:',
-            error.message
-          );
+      vehicle = currentMatch || orderedVehicles[0];
 
-          const { data: fallbackVehicle } =
-            await supabase
-              .from('vehicles')
-              .select('*')
-              .eq('user_id', user.id)
-              .order('created_at', {
-                ascending: true,
-              })
-              .limit(1)
-              .single();
-
-          if (fallbackVehicle) {
-            vehicle = fallbackVehicle;
-          } else {
-            setCurrentVehicle(null);
-            setLoading(false);
-            return;
-          }
-        }
+      if (!vehicle) {
+        setCurrentVehicle(null);
+        setLoading(false);
+        return;
       }
 
       setCurrentVehicle(vehicle);
@@ -230,48 +179,21 @@ export default function HomeScreen({ navigation, route }) {
         partsResult,
         documentsResult,
       ] = await Promise.all([
-        supabase
-          .from('maintenance_records')
-          .select('*', {
-            count: 'exact',
-            head: true,
-          })
-          .eq('vehicle_id', vehicleId),
-
-        supabase
-          .from('repairs')
-          .select('*', {
-            count: 'exact',
-            head: true,
-          })
-          .eq('vehicle_id', vehicleId),
-
-        supabase
-          .from('parts_replacements')
-          .select('*', {
-            count: 'exact',
-            head: true,
-          })
-          .eq('vehicle_id', vehicleId),
-
-        supabase
-          .from('documents')
-          .select('*', {
-            count: 'exact',
-            head: true,
-          })
-          .eq('vehicle_id', vehicleId),
+        api.list('maintenance_records', { vehicle_id: vehicleId }),
+        api.list('repairs', { vehicle_id: vehicleId }),
+        api.list('parts_replacements', { vehicle_id: vehicleId }),
+        api.list('documents', { vehicle_id: vehicleId }),
       ]);
 
       setRecordCounts({
         maintenance:
-          maintenanceResult.count || 0,
+          maintenanceResult.data?.length || 0,
         repairs:
-          repairsResult.count || 0,
+          repairsResult.data?.length || 0,
         parts:
-          partsResult.count || 0,
+          partsResult.data?.length || 0,
         documents:
-          documentsResult.count || 0,
+          documentsResult.data?.length || 0,
       });
     } catch (error) {
       console.log(
@@ -411,10 +333,7 @@ export default function HomeScreen({ navigation, route }) {
     currentVehicle.plate_number ||
     'No Plate';
 
-  const mileage =
-    `${Number(
-      currentVehicle.current_mileage || 0
-    ).toLocaleString()} km`;
+  const mileage = formatDistance(currentVehicle.current_mileage || 0, useMetric);
 
   const fuelType =
     currentVehicle.fuel_type || 'Unknown';

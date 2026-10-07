@@ -21,10 +21,13 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api, sortDesc } from '../lib/api';
 
 
 export default function MaintenanceList({ navigation }) {
+  const { useMetric } = useSettings();
   const route = useRoute();
 
   const [records, setRecords] = useState([]);
@@ -72,23 +75,7 @@ export default function MaintenanceList({ navigation }) {
     setLoading(true);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error('User error:', userError);
-
-        Alert.alert(
-          'Error',
-          'Could not get your account.'
-        );
-
-        return;
-      }
-
-      if (!user) {
+      if (!(await api.auth.hasSession())) {
         setRecords([]);
         return;
       }
@@ -102,18 +89,7 @@ export default function MaintenanceList({ navigation }) {
       // If no vehicle was passed,
       // get the user's first vehicle
       if (!vehicle) {
-        const {
-          data: vehicleData,
-          error: vehicleError,
-        } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', {
-            ascending: true,
-          })
-          .limit(1)
-          .maybeSingle();
+        const { data: vehicleData, error: vehicleError } = await api.firstVehicle();
 
         if (vehicleError) {
           console.error(
@@ -145,16 +121,10 @@ export default function MaintenanceList({ navigation }) {
 
 
       // Get maintenance records
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('maintenance_records')
-        .select('*')
-        .eq('vehicle_id', vehicle.id)
-        .order('service_date', {
-          ascending: false,
-        });
+      const { data: rawData, error } = await api.list('maintenance_records', {
+        vehicle_id: vehicle.id,
+      });
+      const data = sortDesc(rawData, 'service_date', 'created_at');
 
 
       if (error) {
@@ -198,9 +168,7 @@ export default function MaintenanceList({ navigation }) {
           odometer:
             item.mileage !== null &&
             item.mileage !== undefined
-              ? `${Number(
-                  item.mileage
-                ).toLocaleString()} km`
+              ? formatDistance(item.mileage, useMetric)
               : 'No mileage',
 
           serviceType:

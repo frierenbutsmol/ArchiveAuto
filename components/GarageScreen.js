@@ -13,15 +13,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { supabase } from '../lib/supabase';
-
-const BACKGROUND = '#0F0E11';
-// Tonal app-bar surface shared with HomeScreen/AddVehicle.
-const APPBAR_SURFACE = '#1A191D';
-const CARD_BG = '#1c1c1e';
-const ACCENT = '#37C2DF';
-const BORDER = 'rgba(255,255,255,0.15)';
-const TEXT_MUTED = 'rgba(255,255,255,0.5)';
+import { COLORS, SPACING, RADII } from '../constants/theme';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api } from '../lib/api';
 
 // Same type -> icon mapping as AddVehicle.js (MaterialCommunityIcons, since
 // Ionicons has no motorcycle/van/truck icons).
@@ -60,6 +55,7 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false }
 }
 
 export default function GarageScreen({ navigation }) {
+  const { useMetric } = useSettings();
   const insets = useSafeAreaInsets();
 
   const statusBarOffset =
@@ -72,34 +68,19 @@ export default function GarageScreen({ navigation }) {
 
   const loadVehicles = async () => {
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError) {
-        console.error('Error getting user:', userError);
-        Alert.alert('Error', userError.message);
-        return;
-      }
-
-      if (!user) {
-        setVehicles([]);
-        setActiveId(null);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
+      // The server already knows who is logged in from the saved token.
+      const { data: vehicleRows, error } = await api.list('vehicles');
 
       if (error) {
         console.error('Error loading vehicles:', error);
         Alert.alert('Vehicle Loading Failed', error.message);
         return;
       }
+
+      // Oldest vehicle first, same order the Garage used before.
+      const data = [...(vehicleRows || [])].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
 
       const formattedVehicles = (data || []).map((vehicle) => ({
         id: vehicle.id,
@@ -112,9 +93,9 @@ export default function GarageScreen({ navigation }) {
         fuel: vehicle.fuel_type || 'Not specified',
         mileage:
           vehicle.current_mileage != null
-            ? `${Number(vehicle.current_mileage).toLocaleString()} km`
-            : '0 km',
-        // Original Supabase row, passed on when the vehicle is selected
+            ? formatDistance(vehicle.current_mileage, useMetric)
+            : formatDistance(0, useMetric),
+        // Original database row, passed on when the vehicle is selected
         databaseVehicle: vehicle,
       }));
 
@@ -158,7 +139,7 @@ export default function GarageScreen({ navigation }) {
       <View style={[styles.topBar, { marginTop: statusBarOffset }]}>
         <View style={styles.topBarLeft}>
           <View style={styles.brandIcon}>
-            <Ionicons name="car" size={18} color={ACCENT} />
+            <Ionicons name="car" size={18} color={COLORS.primary} />
           </View>
           <View>
             <Text style={styles.brandLabel}>ArchiveAuto</Text>
@@ -166,7 +147,7 @@ export default function GarageScreen({ navigation }) {
           </View>
         </View>
         <Touchable style={styles.avatarButton} borderless rippleColor="rgba(255,255,255,0.15)">
-          <Ionicons name="person" size={17} color="#FFFFFF" />
+          <Ionicons name="person" size={17} color={COLORS.textPrimary} />
         </Touchable>
       </View>
 
@@ -201,7 +182,7 @@ export default function GarageScreen({ navigation }) {
                       <MaterialCommunityIcons
                         name={TYPE_ICONS[vehicle.type] || TYPE_ICONS.car}
                         size={22}
-                        color={ACCENT}
+                        color={COLORS.primary}
                       />
                     </View>
 
@@ -244,7 +225,7 @@ export default function GarageScreen({ navigation }) {
                   <Ionicons
                     name="chevron-forward"
                     size={20}
-                    color={isSelected ? ACCENT : TEXT_MUTED}
+                    color={isSelected ? COLORS.primary : COLORS.textMuted}
                   />
                 </View>
               </Touchable>
@@ -259,7 +240,7 @@ export default function GarageScreen({ navigation }) {
           >
             <View style={styles.addCardInner}>
               <View style={styles.addIconWrapper}>
-                <Ionicons name="add" size={18} color={TEXT_MUTED} />
+                <Ionicons name="add" size={18} color={COLORS.textMuted} />
               </View>
               <Text style={styles.addCardLabel}>Add New Vehicle</Text>
             </View>
@@ -273,15 +254,15 @@ export default function GarageScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: BACKGROUND,
+    backgroundColor: COLORS.background,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 64,
-    paddingHorizontal: 16,
-    backgroundColor: APPBAR_SURFACE,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surfaceElevated,
     zIndex: 10,
     ...Platform.select({
       android: { elevation: 8 },
@@ -302,21 +283,21 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(55, 194, 223, 0.1)',
+    backgroundColor: COLORS.primaryMuted,
     borderWidth: 1,
     borderColor: 'rgba(55, 194, 223, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   brandLabel: {
-    color: ACCENT,
+    color: COLORS.primary,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   topBarTitle: {
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     fontSize: 19,
     fontWeight: '700',
     letterSpacing: 0.15,
@@ -326,44 +307,44 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
     paddingBottom: 100,
   },
   countRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
     paddingHorizontal: 2,
   },
   countText: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   selectHintText: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 12,
   },
   list: {
-    gap: 12,
+    gap: SPACING.md,
   },
   card: {
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
   },
   cardActive: {
-    borderColor: ACCENT,
+    borderColor: COLORS.primary,
   },
   cardInner: {
     flexDirection: 'row',
@@ -400,35 +381,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 3,
-    gap: 8,
+    gap: SPACING.sm,
   },
   cardName: {
-    color: '#FFFFFF',
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
   },
   badge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
+    borderRadius: RADII.full,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
-    backgroundColor: '#2a2a2d',
+    backgroundColor: COLORS.surfaceSubtle,
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
   },
   badgePrimary: {
     backgroundColor: 'rgba(55, 194, 223, 0.12)',
     borderColor: 'rgba(55, 194, 223, 0.35)',
   },
   badgeText: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   badgeTextPrimary: {
-    color: ACCENT,
+    color: COLORS.primary,
   },
   cardSubtitleRow: {
     flexDirection: 'row',
@@ -437,7 +418,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardBrandModel: {
-    color: 'rgba(255,255,255,0.85)',
+    color: COLORS.textSecondary,
     fontSize: 13,
     fontWeight: '500',
     flexShrink: 1,
@@ -446,10 +427,10 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: TEXT_MUTED,
+    backgroundColor: COLORS.textMuted,
   },
   cardYear: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 13,
   },
   tagsRow: {
@@ -458,19 +439,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tagPill: {
-    backgroundColor: '#2a2a2d',
-    paddingHorizontal: 8,
+    backgroundColor: COLORS.surfaceSubtle,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: RADII.sm,
   },
   tagText: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 11,
     fontWeight: '500',
   },
   addCard: {
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: COLORS.border,
     borderStyle: 'dashed',
     borderRadius: 14,
   },
@@ -484,13 +465,13 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: '#2a2a2d',
+    backgroundColor: COLORS.surfaceSubtle,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: SPACING.sm + 2,
   },
   addCardLabel: {
-    color: TEXT_MUTED,
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },

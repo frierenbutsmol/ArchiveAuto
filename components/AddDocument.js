@@ -20,25 +20,11 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
+import { COLORS, SPACING, RADII } from '../constants/theme';
+import { api, sortDesc } from '../lib/api';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
-const BUCKET = 'archiveauto-files';
-
-// Colors pulled from the AutoCare design tokens
-const C = {
-  background: '#141316',
-  surfaceContainerHigh: '#2b292d',
-  surfaceContainerLow: '#1c1b1e',
-  outline: '#849495',
-  outlineVariant: '#3a494b',
-  primaryContainer: '#00f2ff',
-  onSurface: '#e6e1e5',
-  onSurfaceVariant: '#b9cacb',
-  error: '#ffb4ab',
-};
-
-const APPBAR_SURFACE = C.surfaceContainerHigh;
+const MAX_FILE_BYTES = 8 * 1024 * 1024;   // same limit as the server
 
 const DOCUMENT_TYPES = ['OR/CR', 'Insurance', 'Warranty', 'Other'];
 
@@ -77,11 +63,18 @@ const formatDate = (value) => {
 
 // Maps a DB row to what the card needs.
 const toCard = (row) => {
-  const ext = row.file_path?.split('.').pop()?.toLowerCase();
+  const nameForExt = row.file_name || row.file_path || '';
+  const ext = nameForExt.includes('.')
+    ? nameForExt.split('.').pop().toLowerCase()
+    : row.file_type === 'application/pdf'
+    ? 'pdf'
+    : row.file_type
+    ? 'jpg'
+    : undefined;
   const isImage = ext === 'jpg' || ext === 'jpeg' || ext === 'png';
 
   let status = 'No expiry';
-  let statusColor = C.onSurfaceVariant;
+  let statusColor = COLORS.textMuted;
 
   if (row.expiry_date) {
     const days = Math.ceil(
@@ -89,13 +82,13 @@ const toCard = (row) => {
     );
     if (days < 0) {
       status = 'Expired';
-      statusColor = C.error;
+      statusColor = COLORS.danger;
     } else if (days <= 30) {
       status = 'Expiring Soon';
-      statusColor = C.error;
+      statusColor = COLORS.danger;
     } else {
       status = 'Active';
-      statusColor = C.primaryContainer;
+      statusColor = COLORS.primary;
     }
   }
 
@@ -175,19 +168,10 @@ export default function AddDocument() {
   const resolveVehicle = async () => {
     if (vehicle?.id) return vehicle;
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError || !user) throw new Error('You are not signed in.');
-
-    const { data: vehicles, error } = await supabase
-      .from('vehicles')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    if (!vehicles || vehicles.length === 0) return null;
+    const { data: rows, error } = await api.list('vehicles');
+    if (error) throw new Error(error.message);
+    if (!rows || rows.length === 0) return null;
+    const vehicles = [...rows].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
     let chosen = null;
     const saved = await AsyncStorage.getItem(SELECTED_VEHICLE_KEY);
@@ -213,14 +197,9 @@ export default function AddDocument() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .eq('vehicle_id', activeVehicle.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setDocuments((data || []).map(toCard));
+      const { data, error } = await api.list('documents', { vehicle_id: activeVehicle.id });
+      if (error) throw new Error(error.message);
+      setDocuments(sortDesc(data, 'created_at').map(toCard));
     } catch (error) {
       console.error('Load documents error:', error);
       Alert.alert('Could not load documents', error?.message || 'Please try again.');
@@ -274,6 +253,11 @@ export default function AddDocument() {
       const file = result.assets?.[0];
       if (!file) return;
 
+      if (file.size && file.size > MAX_FILE_BYTES) {
+        Alert.alert('File Too Large', 'Please choose a file under 8 MB.');
+        return;
+      }
+
       const detectedMimeType = getMimeType(file.name);
       if (!detectedMimeType) {
         Alert.alert('Unsupported File', 'Please select a PDF, JPG, JPEG, or PNG file.');
@@ -323,62 +307,40 @@ export default function AddDocument() {
       return;
     }
 
-    let filePath = null;
+    let fileId = null;
 
     try {
       setSaving(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Error', 'You are not logged in.');
         return;
       }
 
-      const fileExtension =
-        selectedFile.name?.split('.').pop()?.toLowerCase() || 'file';
-      const safeFileName =
-        selectedFile.name?.replace(/[^a-zA-Z0-9._-]/g, '_') ||
-        `document.${fileExtension}`;
-
-      filePath = `${user.id}/${vehicle.id}/documents/${Date.now()}_${safeFileName}`;
-
-      const response = await fetch(selectedFile.uri);
-      if (!response.ok) throw new Error('Failed to read the selected file.');
-
-      // ArrayBuffer instead of Blob: React Native/Expo can report fetched
-      // blobs as text/plain.
-      const fileArrayBuffer = await response.arrayBuffer();
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(filePath, fileArrayBuffer, {
-          contentType: mimeType,
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error('Document upload error:', uploadError);
-        filePath = null; // nothing to clean up
-        Alert.alert('Upload Failed', uploadError.message);
+      const upload = await api.files.upload(selectedFile.uri, {
+        mime: mimeType,
+        name: selectedFile.name,
+      });
+      if (upload.error) {
+        Alert.alert('Upload Failed', upload.error.message);
         return;
       }
+      fileId = upload.data.id;
 
-      const { error: insertError } = await supabase.from('documents').insert({
+      const { error: insertError } = await api.create('documents', {
         vehicle_id: vehicle.id,
         document_type: docType,
-        file_path: filePath,
+        file_path: fileId,
+        file_name: selectedFile.name || null,
+        file_type: mimeType,
         issue_date: null,
         expiry_date: formattedExpiryDate,
         notes: docName.trim(),
       });
 
       if (insertError) {
-        console.error('Document database error:', insertError);
-        await supabase.storage.from(BUCKET).remove([filePath]);
+        await api.files.remove(fileId);   // don't leave an orphan upload behind
+        fileId = null;
         Alert.alert('Save Failed', insertError.message);
         return;
       }
@@ -388,10 +350,7 @@ export default function AddDocument() {
       await loadDocuments();
       Alert.alert('Saved', 'Document uploaded successfully.');
     } catch (error) {
-      console.error('Save document error:', error);
-      if (filePath) {
-        await supabase.storage.from(BUCKET).remove([filePath]).catch(() => {});
-      }
+      if (fileId) await api.files.remove(fileId).catch(() => {});
       Alert.alert('Save Failed', 'Something went wrong while uploading the document.');
     } finally {
       setSaving(false);
@@ -399,32 +358,18 @@ export default function AddDocument() {
   };
 
   const handleDocumentPress = async (doc) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .createSignedUrl(doc.filePath, 60 * 5);
-      if (error) throw error;
-      await Linking.openURL(data.signedUrl);
-    } catch (error) {
-      console.error('Open document error:', error);
-      Alert.alert('Could not open document', error?.message || 'Please try again.');
-    }
+    const { error } = await api.files.open(doc.filePath);
+    if (error) Alert.alert('Could not open document', error.message || 'Please try again.');
   };
 
   const deleteDocument = async (doc) => {
-    try {
-      const { error: rowError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', doc.id);
-      if (rowError) throw rowError;
-
-      await supabase.storage.from(BUCKET).remove([doc.filePath]);
-      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-    } catch (error) {
-      console.error('Delete document error:', error);
-      Alert.alert('Delete Failed', error?.message || 'Please try again.');
+    // The server also deletes the stored file.
+    const { error } = await api.remove('documents', doc.id);
+    if (error) {
+      Alert.alert('Delete Failed', error.message || 'Please try again.');
+      return;
     }
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
   };
 
   const handleMorePress = (doc) => {
@@ -457,7 +402,7 @@ export default function AddDocument() {
           borderless
           rippleColor="rgba(255,255,255,0.15)"
         >
-          <MaterialIcons name="arrow-back" size={24} color={C.onSurface} />
+          <MaterialIcons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </Touchable>
         <Text style={styles.brand}>ArchiveAuto</Text>
       </View>
@@ -478,14 +423,14 @@ export default function AddDocument() {
           rippleColor="rgba(0,0,0,0.15)"
         >
           <View style={styles.uploadButtonInner}>
-            <MaterialIcons name="upload" size={20} color="#121212" />
+            <MaterialIcons name="upload" size={20} color={COLORS.textInverse} />
             <Text style={styles.uploadButtonText}>Upload Document</Text>
           </View>
         </Touchable>
 
         {loading ? (
           <View style={styles.centerBlock}>
-            <ActivityIndicator size="small" color={C.primaryContainer} />
+            <ActivityIndicator size="small" color={COLORS.primary} />
           </View>
         ) : (
           <View style={styles.grid}>
@@ -507,7 +452,7 @@ export default function AddDocument() {
                 <View style={styles.cardInner}>
                   <View style={styles.cardTopRow}>
                     <View style={styles.cardIconWrapper}>
-                      <MaterialIcons name={doc.icon} size={22} color={C.primaryContainer} />
+                      <MaterialIcons name={doc.icon} size={22} color={COLORS.primary} />
                     </View>
                     <Touchable
                       style={styles.moreButton}
@@ -515,7 +460,7 @@ export default function AddDocument() {
                       rippleColor="rgba(255,255,255,0.15)"
                       onPress={() => handleMorePress(doc)}
                     >
-                      <MaterialIcons name="more-vert" size={20} color={C.onSurfaceVariant} />
+                      <MaterialIcons name="more-vert" size={20} color={COLORS.textMuted} />
                     </Touchable>
                   </View>
 
@@ -536,7 +481,7 @@ export default function AddDocument() {
                       </Text>
                     </View>
                     <View style={styles.fileTypeRow}>
-                      <MaterialIcons name={doc.fileIcon} size={16} color={C.onSurfaceVariant} />
+                      <MaterialIcons name={doc.fileIcon} size={16} color={COLORS.textMuted} />
                       <Text style={styles.fileTypeText}>{doc.fileType}</Text>
                     </View>
                   </View>
@@ -551,7 +496,7 @@ export default function AddDocument() {
               rippleColor="rgba(255,255,255,0.06)"
             >
               <View style={styles.addCardInner}>
-                <MaterialIcons name="add-circle" size={36} color={C.onSurfaceVariant} />
+                <MaterialIcons name="add-circle" size={36} color={COLORS.textMuted} />
                 <Text style={styles.addCardTitle}>Add New Document</Text>
                 <Text style={styles.addCardHint}>Tap to browse</Text>
               </View>
@@ -573,7 +518,7 @@ export default function AddDocument() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.modalKav}
           >
-            <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SPACING.lg) }]}>
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>Add Document</Text>
                 <Touchable
@@ -583,7 +528,7 @@ export default function AddDocument() {
                   disabled={saving}
                   rippleColor="rgba(255,255,255,0.15)"
                 >
-                  <MaterialIcons name="close" size={20} color={C.onSurfaceVariant} />
+                  <MaterialIcons name="close" size={20} color={COLORS.textMuted} />
                 </Touchable>
               </View>
 
@@ -596,13 +541,13 @@ export default function AddDocument() {
                 <TextInput
                   style={[styles.input, nameFocused && styles.inputFocused]}
                   placeholder="e.g. Official Receipt (OR), Insurance Policy"
-                  placeholderTextColor="rgba(185, 202, 203, 0.5)"
+                  placeholderTextColor={COLORS.textMuted}
                   value={docName}
                   onChangeText={setDocName}
                   onFocus={() => setNameFocused(true)}
                   onBlur={() => setNameFocused(false)}
                   editable={!saving}
-                  selectionColor={C.primaryContainer}
+                  selectionColor={COLORS.primary}
                   underlineColorAndroid="transparent"
                 />
 
@@ -616,7 +561,7 @@ export default function AddDocument() {
                         style={[styles.typeButton, active && styles.typeButtonActive]}
                         onPress={() => setDocType(type)}
                         disabled={saving}
-                        rippleColor="rgba(0, 242, 255, 0.12)"
+                        rippleColor="rgba(55, 194, 223, 0.12)"
                       >
                         <Text
                           style={[
@@ -635,13 +580,13 @@ export default function AddDocument() {
                 <TextInput
                   style={[styles.input, expiryFocused && styles.inputFocused]}
                   placeholder="e.g. Oct 28, 2026 or YYYY-MM-DD"
-                  placeholderTextColor="rgba(185, 202, 203, 0.5)"
+                  placeholderTextColor={COLORS.textMuted}
                   value={expiryDate}
                   onChangeText={setExpiryDate}
                   onFocus={() => setExpiryFocused(true)}
                   onBlur={() => setExpiryFocused(false)}
                   editable={!saving}
-                  selectionColor={C.primaryContainer}
+                  selectionColor={COLORS.primary}
                   underlineColorAndroid="transparent"
                 />
 
@@ -650,12 +595,12 @@ export default function AddDocument() {
                   style={styles.filePickerBox}
                   onPress={pickDocument}
                   disabled={saving}
-                  rippleColor="rgba(0, 242, 255, 0.12)"
+                  rippleColor="rgba(55, 194, 223, 0.12)"
                 >
                   <MaterialIcons
                     name={selectedFile ? 'attach-file' : 'upload-file'}
                     size={24}
-                    color={C.primaryContainer}
+                    color={COLORS.primary}
                   />
                   <Text style={styles.filePickerText} numberOfLines={2}>
                     {selectedFile ? selectedFile.name : 'Select PDF or photo scan'}
@@ -671,10 +616,10 @@ export default function AddDocument() {
                     rippleColor="rgba(0,0,0,0.15)"
                   >
                     {saving ? (
-                      <ActivityIndicator size="small" color="#121212" />
+                      <ActivityIndicator size="small" color={COLORS.textInverse} />
                     ) : (
                       <>
-                        <MaterialIcons name="cloud-upload" size={20} color="#121212" />
+                        <MaterialIcons name="cloud-upload" size={20} color={COLORS.textInverse} />
                         <Text style={styles.saveButtonText}>Save Document</Text>
                       </>
                     )}
@@ -692,14 +637,14 @@ export default function AddDocument() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.background,
+    backgroundColor: COLORS.background,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     height: 64,
-    paddingHorizontal: 16,
-    backgroundColor: APPBAR_SURFACE,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surfaceElevated,
     zIndex: 10,
     ...Platform.select({
       android: { elevation: 8 },
@@ -717,19 +662,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   brand: {
-    color: C.primaryContainer,
+    color: COLORS.primary,
     fontSize: 22,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 40,
-    gap: 16,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxxl + SPACING.sm,
+    gap: SPACING.lg,
   },
   headerRow: {
     marginBottom: 4,
@@ -738,21 +683,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 28,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
   },
   subtitle: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 15,
   },
   uploadButton: {
-    borderRadius: 999,
-    backgroundColor: C.primaryContainer,
+    borderRadius: RADII.full,
+    backgroundColor: COLORS.primary,
     ...Platform.select({
       ios: {
-        shadowColor: C.primaryContainer,
+        shadowColor: COLORS.primary,
         shadowOpacity: 0.35,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },
@@ -763,36 +708,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md + 2,
   },
   uploadButtonText: {
-    color: '#121212',
+    color: COLORS.textInverse,
     fontSize: 14,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
   },
   centerBlock: {
-    paddingVertical: 32,
+    paddingVertical: SPACING.xxxl,
     alignItems: 'center',
   },
   emptyText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   grid: {
-    gap: 16,
+    gap: SPACING.lg,
   },
   card: {
-    backgroundColor: 'rgba(42,42,42,0.7)',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: 'rgba(51,51,51,0.8)',
-    borderRadius: 16,
+    borderColor: COLORS.borderLight,
+    borderRadius: RADII.card,
   },
   cardInner: {
-    padding: 16,
-    gap: 12,
+    padding: SPACING.lg,
+    gap: SPACING.md,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -800,9 +745,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   cardIconWrapper: {
-    backgroundColor: C.surfaceContainerLow,
-    padding: 12,
-    borderRadius: 10,
+    backgroundColor: COLORS.surfaceSubtle,
+    padding: SPACING.md,
+    borderRadius: RADII.md,
   },
   moreButton: {
     width: 32,
@@ -815,12 +760,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardTitle: {
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   cardDate: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -829,13 +774,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(58,73,75,0.5)',
+    borderTopColor: COLORS.borderLight,
   },
   statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    borderRadius: RADII.full,
+    paddingHorizontal: SPACING.sm + 2,
     paddingVertical: 4,
   },
   statusPillText: {
@@ -848,30 +793,30 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   fileTypeText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 11,
     fontWeight: '600',
   },
   addCard: {
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: C.outlineVariant,
-    borderRadius: 16,
+    borderColor: COLORS.border,
+    borderRadius: RADII.card,
   },
   addCardInner: {
-    paddingVertical: 32,
+    paddingVertical: SPACING.xxxl,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
   addCardTitle: {
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 15,
     fontWeight: '500',
     marginTop: 4,
   },
   addCardHint: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 12,
   },
 
@@ -885,116 +830,116 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: C.background,
+    backgroundColor: COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: C.outlineVariant,
+    borderColor: COLORS.border,
     maxHeight: '90%',
   },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.sm,
   },
   sheetTitle: {
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 20,
     fontWeight: '600',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
   },
   sheetContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
   },
   fieldLabel: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: SPACING.sm - 2,
   },
   input: {
-    backgroundColor: C.surfaceContainerHigh,
+    backgroundColor: COLORS.surfaceElevated,
     borderBottomWidth: 2,
-    borderBottomColor: C.outline,
-    paddingHorizontal: 16,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
     minHeight: 52,
-    color: C.onSurface,
+    color: COLORS.textPrimary,
     fontSize: 16,
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   inputFocused: {
-    borderBottomColor: C.primaryContainer,
+    borderBottomColor: COLORS.primary,
   },
   typeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   typeButton: {
-    backgroundColor: C.surfaceContainerHigh,
-    borderRadius: 999,
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADII.full,
     borderWidth: 1,
-    borderColor: C.outlineVariant,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 1,
   },
   typeButtonActive: {
-    backgroundColor: 'rgba(0, 242, 255, 0.12)',
-    borderColor: C.primaryContainer,
+    backgroundColor: COLORS.primaryMuted,
+    borderColor: COLORS.primary,
   },
   typeButtonText: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: '500',
   },
   typeButtonTextActive: {
-    color: C.primaryContainer,
+    color: COLORS.primary,
     fontWeight: '600',
   },
   filePickerBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: SPACING.sm,
     minHeight: 64,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADII.card,
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: C.outlineVariant,
-    backgroundColor: C.surfaceContainerHigh,
-    marginBottom: 6,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceElevated,
+    marginBottom: SPACING.sm - 2,
   },
   filePickerText: {
-    color: C.primaryContainer,
+    color: COLORS.primary,
     fontSize: 14,
     fontWeight: '600',
     flexShrink: 1,
   },
   fileHint: {
-    color: C.onSurfaceVariant,
+    color: COLORS.textMuted,
     fontSize: 12,
-    marginBottom: 20,
+    marginBottom: SPACING.xl,
   },
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: SPACING.sm,
     height: 52,
-    borderRadius: 999,
-    backgroundColor: C.primaryContainer,
+    borderRadius: RADII.full,
+    backgroundColor: COLORS.primary,
   },
   saveButtonText: {
-    color: '#121212',
+    color: COLORS.textInverse,
     fontSize: 15,
     fontWeight: '700',
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),

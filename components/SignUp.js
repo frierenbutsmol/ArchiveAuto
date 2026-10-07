@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function SignUp() {
   const navigation = useNavigation();
@@ -123,21 +123,21 @@ export default function SignUp() {
 
     setLoading(true);
 
-    // Create Supabase account
-    const { data, error } = await supabase.auth.signUp({
+    // Create the account on our server (this also saves the display name)
+    const { data, error } = await api.auth.signUp({
       email: email.trim(),
       password: password,
+      displayName: displayName.trim(),
     });
 
+    setLoading(false);
+
     if (error) {
-      setLoading(false);
       Alert.alert('Sign Up Failed', error.message);
       return;
     }
 
-    // Make sure we have a user ID
-    if (!data.user) {
-      setLoading(false);
+    if (!data?.user) {
       Alert.alert(
         'Sign Up Failed',
         'The account was created, but the user information could not be found.'
@@ -145,44 +145,8 @@ export default function SignUp() {
       return;
     }
 
-    // Save display name in profiles table
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        display_name: displayName.trim(),
-      });
-
-    if (profileError) {
-      setLoading(false);
-
-      Alert.alert(
-        'Profile Setup Failed',
-        profileError.message
-      );
-
-      return;
-    }
-
-    setLoading(false);
-
-    // If email confirmation is required
-    if (data.session === null) {
-      Alert.alert(
-        'Account Created',
-        'Your account has been created. Please check your email to confirm your account.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('SignIn'),
-          },
-        ]
-      );
-
-      return;
-    }
-
-    // If email confirmation is not required
+    // The server signs the new user in right away (no email confirmation step).
+    // Go straight to the app
     navigation.reset({
       index: 0,
       routes: [{ name: 'MainTabs' }],
@@ -251,7 +215,7 @@ export default function SignUp() {
               </TouchableOpacity>
 
               <Text style={styles.brandBadge}>
-                AUTOCARE
+                ARCHIVEAUTO
               </Text>
 
               <Text style={styles.title}>

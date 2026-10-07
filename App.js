@@ -1,9 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import * as Linking from 'expo-linking';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { supabase } from './lib/supabase';
+import { api } from './lib/api';
+import { COLORS } from './constants/theme';
 
 import SignIn from './components/SignIn';
 import SignUp from './components/SignUp';
@@ -13,6 +15,7 @@ import MainTabs from './components/MainTabs';
 import GarageScreen from './components/GarageScreen';
 import AddVehicle from './components/AddVehicle';
 import SettingsScreen from './components/SettingsScreen';
+import InfoScreen from './components/InfoScreen';
 import Notification from './components/Notification';
 import MaintenanceList from './components/MaintenanceList';
 import AddMaintenance from './components/AddMaintenance';
@@ -27,67 +30,58 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   const navigationRef = useRef(null);
+  // null while we check for a saved login; then 'MainTabs' (logged in) or 'SignIn'.
+  const [initialRoute, setInitialRoute] = useState(null);
+
+  // Reset links look like: archiveauto://reset-password?token=XXXX
+  const handleDeepLink = (url) => {
+    if (!url || !url.includes('reset-password')) return;
+
+    const match = url.match(/[?&]token=([^&#]+)/);
+    if (!match) return;
+
+    navigationRef.current?.navigate('UpdatePassword', {
+      token: decodeURIComponent(match[1]),
+    });
+  };
 
   useEffect(() => {
-    const handleDeepLink = async (url) => {
-      if (!url) return;
+    // Skip the Sign In screen when a login token is already saved.
+    api.auth
+      .hasSession()
+      .then((has) => setInitialRoute(has ? 'MainTabs' : 'SignIn'))
+      .catch(() => setInitialRoute('SignIn'));
+  }, []);
 
-      console.log('Deep link received:', url);
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
 
-      const hash = url.split('#')[1];
-
-      if (!hash) {
-        return;
-      }
-
-      const params = new URLSearchParams(hash);
-
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      const type = params.get('type');
-
-      if (type !== 'recovery') {
-        return;
-      }
-
-      if (!accessToken || !refreshToken) {
-        console.log('Reset link is missing session information.');
-        return;
-      }
-
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
-      if (error) {
-        console.log(
-          'Failed to create recovery session:',
-          error.message
-        );
-        return;
-      }
-
-      navigationRef.current?.navigate('UpdatePassword');
-    };
-
-    Linking.getInitialURL().then(handleDeepLink);
-
-    const subscription = Linking.addEventListener(
-      'url',
-      ({ url }) => {
-        handleDeepLink(url);
-      }
-    );
+    // If the login token expires or is rejected, send the user back to Sign In.
+    const stopExpiry = api.auth.onSessionExpired(() => {
+      navigationRef.current?.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+    });
 
     return () => {
       subscription.remove();
+      stopExpiry();
     };
   }, []);
 
+  if (!initialRoute) {
+    return (
+      <View style={{ flex: 1, backgroundColor: COLORS.background, justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color={COLORS.textPrimary} />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer ref={navigationRef}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => Linking.getInitialURL().then(handleDeepLink)}>
+      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
 
         <Stack.Screen
           name="SignIn"
@@ -133,6 +127,11 @@ export default function App() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+        />
+
+        <Stack.Screen
+          name="Info"
+          component={InfoScreen}
         />
 
         <Stack.Screen

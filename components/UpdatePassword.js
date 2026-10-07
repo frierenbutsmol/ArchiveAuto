@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const REQUIREMENTS = [
   {
@@ -38,7 +38,9 @@ const REQUIREMENTS = [
   },
 ];
 
-export default function UpdatePassword({ navigation }) {
+export default function UpdatePassword({ navigation, route }) {
+  // Set when the user arrives from a reset link: archiveauto://reset-password?token=...
+  const resetToken = route?.params?.token;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -67,9 +69,9 @@ export default function UpdatePassword({ navigation }) {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password: password,
-    });
+    const { error } = resetToken
+      ? await api.auth.resetPassword(resetToken, password)
+      : await api.auth.updatePassword(password);
 
     setLoading(false);
 
@@ -140,7 +142,7 @@ export default function UpdatePassword({ navigation }) {
             </TouchableOpacity>
 
             <Text style={styles.brandBadge}>
-              AUTOCARE
+              ARCHIVEAUTO
             </Text>
 
             <Text style={styles.title}>

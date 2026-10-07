@@ -14,10 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api } from '../lib/api';
 
 export default function AddPart({ navigation }) {
   const route = useRoute();
+  const { useMetric } = useSettings();
 
   const [vehicle, setVehicle] = useState(
     route?.params?.vehicle || null
@@ -34,50 +37,23 @@ export default function AddPart({ navigation }) {
 
   const loadVehicle = useCallback(async () => {
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Error', 'You are not logged in.');
         return;
       }
 
-      if (!vehicle?.id) {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+      const { data, error } = vehicle?.id
+        ? await api.get('vehicles', vehicle.id)
+        : await api.firstVehicle();
 
-        if (error) {
-          console.error('Vehicle load error:', error);
-          Alert.alert('Error', 'Failed to load vehicle.');
-          return;
-        }
-
-        setVehicle(data);
-        setCurrentMileage(Number(data?.current_mileage) || 0);
-      } else {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .select('*')
-          .eq('id', vehicle.id)
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Vehicle load error:', error);
-          Alert.alert('Error', 'Failed to load vehicle.');
-          return;
-        }
-
-        setVehicle(data);
-        setCurrentMileage(Number(data?.current_mileage) || 0);
+      if (error) {
+        console.error('Vehicle load error:', error);
+        Alert.alert('Error', 'Failed to load vehicle.');
+        return;
       }
+
+      setVehicle(data);
+      setCurrentMileage(Number(data?.current_mileage) || 0);
     } catch (error) {
       console.error('Load vehicle error:', error);
       Alert.alert(
@@ -132,10 +108,11 @@ export default function AddPart({ navigation }) {
     }
 
     // Prevent the official meter from going backwards.
-    if (mileageValue < currentMileage) {
+    const mileageKm = displayToKm(mileageValue, useMetric);
+    if (mileageKm < currentMileage) {
       Alert.alert(
         'Invalid Odometer',
-        `The odometer cannot be lower than the current mileage of ${currentMileage.toLocaleString()} km.`
+        `The odometer cannot be lower than the current mileage of ${formatDistance(currentMileage, useMetric)}.`
       );
       return;
     }
@@ -147,31 +124,24 @@ export default function AddPart({ navigation }) {
     try {
       setSaving(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         Alert.alert('Error', 'You are not logged in.');
         return;
       }
 
-      const { error: insertError } = await supabase
-        .from('parts_replacements')
-        .insert({
+      const { error: insertError } = await api.create('parts_replacements', {
           vehicle_id: vehicle.id,
           part_name: partName.trim(),
           brand: brand.trim() || null,
           replacement_date: new Date()
             .toISOString()
             .split('T')[0],
-          mileage: mileageValue,
+          mileage: mileageKm,
           cost: Number.isNaN(costValue)
             ? null
             : costValue,
           notes: null,
-        });
+      });
 
       if (insertError) {
         console.error('Part save error:', insertError);
@@ -183,14 +153,10 @@ export default function AddPart({ navigation }) {
       }
 
       // Update the official vehicle mileage if the new reading is higher.
-      if (mileageValue > currentMileage) {
-        const { error: mileageError } = await supabase
-          .from('vehicles')
-          .update({
-            current_mileage: mileageValue,
-          })
-          .eq('id', vehicle.id)
-          .eq('user_id', user.id);
+      if (mileageKm > currentMileage) {
+        const { error: mileageError } = await api.update('vehicles', vehicle.id, {
+          current_mileage: mileageKm,
+        });
 
         if (mileageError) {
           console.error(
@@ -313,7 +279,7 @@ export default function AddPart({ navigation }) {
           />
 
           <Text style={styles.fieldLabel}>
-            Odometer (km) *
+            Odometer ({distanceUnit(useMetric)}) *
           </Text>
 
           <TextInput
@@ -343,7 +309,7 @@ export default function AddPart({ navigation }) {
             <Text style={styles.currentMileageText}>
               Current official mileage:{' '}
               <Text style={styles.currentMileageValue}>
-                {currentMileage.toLocaleString()} km
+                {formatDistance(currentMileage, useMetric)}
               </Text>
             </Text>
           </View>

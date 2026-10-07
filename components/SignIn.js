@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function SignIn({ navigation }) {
   const [email, setEmail] = useState('');
@@ -35,7 +35,7 @@ export default function SignIn({ navigation }) {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await api.auth.signIn({
       email: email.trim(),
       password: password,
     });

@@ -13,9 +13,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { useSettings } from '../lib/settings';
+import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
+import { api, sortDesc } from '../lib/api';
 
 export default function RepairList({ navigation }) {
+  const { useMetric } = useSettings();
   const route = useRoute();
 
   const [repairs, setRepairs] = useState([]);
@@ -28,12 +31,7 @@ export default function RepairList({ navigation }) {
     setLoading(true);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
+      if (!(await api.auth.hasSession())) {
         setRepairs([]);
         setLoading(false);
         return;
@@ -44,13 +42,7 @@ export default function RepairList({ navigation }) {
       // If no vehicle was passed, get the user's first vehicle.
       if (!vehicle?.id) {
         const { data: vehicleData, error: vehicleError } =
-          await supabase
-            .from('vehicles')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
+          await api.firstVehicle();
 
         if (vehicleError) {
           console.error('Vehicle load error:', vehicleError);
@@ -73,12 +65,10 @@ export default function RepairList({ navigation }) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('repairs')
-        .select('*')
-        .eq('vehicle_id', vehicle.id)
-        .order('repair_date', { ascending: false })
-        .order('created_at', { ascending: false });
+      const { data: rawData, error } = await api.list('repairs', {
+        vehicle_id: vehicle.id,
+      });
+      const data = sortDesc(rawData, 'repair_date', 'created_at');
 
       if (error) {
         console.error('Repair load error:', error);
@@ -123,7 +113,7 @@ export default function RepairList({ navigation }) {
             : 'No date',
           odometer:
             repair.mileage != null
-              ? `${Number(repair.mileage).toLocaleString()} km`
+              ? formatDistance(repair.mileage, useMetric)
               : 'No mileage',
           repairType: repair.repair_type,
           shop: repair.shop_name || 'No shop specified',
@@ -132,6 +122,7 @@ export default function RepairList({ navigation }) {
               ? `₱${Number(repair.cost).toLocaleString()}`
               : 'No cost',
           hasPhotoProof,
+          proofFileId: repair.proof_file_path,
           proofStatus,
           description:
             repair.notes ||
@@ -336,7 +327,13 @@ export default function RepairList({ navigation }) {
                 </Text>
 
                 {/* Photo proof indicator */}
-                <View
+                <TouchableOpacity
+                  disabled={!item.hasPhotoProof}
+                  activeOpacity={0.7}
+                  onPress={async () => {
+                    const { error } = await api.files.open(item.proofFileId);
+                    if (error) Alert.alert('Unable to Open', error.message);
+                  }}
                   style={[
                     styles.proofRow,
                     item.hasPhotoProof
@@ -365,9 +362,9 @@ export default function RepairList({ navigation }) {
                         color: COLORS.success,
                       },
                     ]}>
-                    {item.proofStatus}
+                    {item.hasPhotoProof ? `${item.proofStatus} · Tap to view` : item.proofStatus}
                   </Text>
-                </View>
+                </TouchableOpacity>
               </View>
             ))}
           </View>

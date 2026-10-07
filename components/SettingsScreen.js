@@ -12,52 +12,63 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
+import { api } from '../lib/api';
+import appJson from '../app.json';
+import { useSettings, updateSettings } from '../lib/settings';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const settings = useSettings();
 
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [maintenanceAlerts, setMaintenanceAlerts] = useState(true);
-  const [docExpiryAlerts, setDocExpiryAlerts] = useState(true);
-  const [useMetric, setUseMetric] = useState(true);
-
+  // Real, saved preferences. Alerts and distance units read these.
   const toggles = [
-    {
-      id: 'push',
-      label: 'Push Notifications',
-      desc: 'Get notified for urgent service reminders',
-      value: pushNotifications,
-      onValueChange: setPushNotifications,
-    },
     {
       id: 'maint',
       label: 'Mileage Reminders',
-      desc: 'Alert when odometer milestones approach',
-      value: maintenanceAlerts,
-      onValueChange: setMaintenanceAlerts,
+      desc: 'Alert when a service is due or overdue by odometer',
+      value: settings.mileageReminders,
+      onValueChange: (v) => updateSettings({ mileageReminders: v }),
     },
     {
       id: 'doc',
       label: 'Document Expiry Alerts',
-      desc: '30-day notice for OR/CR & Insurance renewal',
-      value: docExpiryAlerts,
-      onValueChange: setDocExpiryAlerts,
+      desc: '30-day notice before OR/CR, insurance and warranty expire',
+      value: settings.docExpiryAlerts,
+      onValueChange: (v) => updateSettings({ docExpiryAlerts: v }),
     },
     {
       id: 'metric',
-      label: 'Use Metric Units (km, L)',
-      desc: 'Display distance in km and fuel in Liters',
-      value: useMetric,
-      onValueChange: setUseMetric,
+      label: 'Use Kilometres',
+      desc: 'Show distances in km (turn off for miles)',
+      value: settings.useMetric,
+      onValueChange: (v) => updateSettings({ useMetric: v }),
+    },
+  ];
+
+  const accountItems = [
+    {
+      id: 'security',
+      icon: 'lock-closed-outline',
+      label: 'Security & Password',
+      onPress: () => navigation.navigate('UpdatePassword'),
     },
   ];
 
   const links = [
+    { id: 'faq', label: 'Help & FAQ' },
     { id: 'proof', label: 'Photo Proof Policy & Verification Guidelines' },
     { id: 'privacy', label: 'Privacy Policy' },
     { id: 'terms', label: 'Terms of Service' },
-    { id: 'about', label: 'About AutoCare v1.0.0' },
+    { id: 'about', label: 'About ArchiveAuto' },
   ];
+
+  const handleSignOut = async () => {
+    await api.auth.signOut();   // clears the saved token
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'SignIn' }],
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -76,6 +87,24 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Account */}
+        <Text style={styles.sectionTitle}>Account</Text>
+        <View style={styles.card}>
+          {accountItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.linkRow, index !== accountItems.length - 1 && styles.rowDivider]}
+              activeOpacity={0.7}
+              onPress={item.onPress}>
+              <View style={styles.linkRowLeft}>
+                <Ionicons name={item.icon} size={18} color={COLORS.textMuted} />
+                <Text style={styles.rowLabel}>{item.label}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Reminders & Preferences */}
         <Text style={styles.sectionTitle}>Reminders & Preferences</Text>
         <View style={styles.card}>
@@ -105,12 +134,20 @@ export default function SettingsScreen() {
               key={item.id}
               style={[styles.linkRow, index !== links.length - 1 && styles.rowDivider]}
               activeOpacity={0.7}
-              onPress={() => console.log('Pressed:', item.id)}>
+              onPress={() => navigation.navigate('Info', { page: item.id })}>
               <Text style={styles.rowLabel}>{item.label}</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
             </TouchableOpacity>
           ))}
+          <View style={styles.linkRow}>
+            <Text style={styles.rowLabel}>App Version</Text>
+            <Text style={styles.versionText}>v{appJson.expo?.version || '1.0.0'}</Text>
+          </View>
         </View>
+
+        <TouchableOpacity style={styles.signOutButton} activeOpacity={0.8} onPress={handleSignOut}>
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -184,6 +221,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
   },
+  linkRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
   rowDivider: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
@@ -201,5 +243,22 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 12,
     marginTop: 2,
+  },
+  versionText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+  },
+  signOutButton: {
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    borderRadius: RADII.button,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    marginBottom: SPACING.xl,
+  },
+  signOutText: {
+    color: COLORS.danger,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
