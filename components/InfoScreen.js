@@ -5,8 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import appJson from '../app.json';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 
-// TODO: put your real support address here.
-const SUPPORT_EMAIL = 'support@archiveauto.app';
+// Set EXPO_PUBLIC_SUPPORT_EMAIL in the app's .env to your real support address.
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'support@archiveauto.app';
 const VERSION = appJson.expo?.version || '1.0.0';
 
 // Each page is a list of { h: heading, p: paragraph } blocks.
