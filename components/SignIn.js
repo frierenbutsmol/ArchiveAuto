@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import { routeForRole } from '../lib/roles';
 
 export default function SignIn({ navigation }) {
   const [email, setEmail] = useState('');
@@ -35,7 +36,7 @@ export default function SignIn({ navigation }) {
 
     setLoading(true);
 
-    const { error } = await api.auth.signIn({
+    const { data, error } = await api.auth.signIn({
       email: email.trim(),
       password: password,
     });
@@ -47,9 +48,10 @@ export default function SignIn({ navigation }) {
       return;
     }
 
+    // Each role lands on its own dashboard.
     navigation.reset({
       index: 0,
-      routes: [{ name: 'MainTabs' }],
+      routes: [{ name: routeForRole(data?.user?.role) }],
     });
   };
 

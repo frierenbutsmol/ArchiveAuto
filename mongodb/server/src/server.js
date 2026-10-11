@@ -10,49 +10,87 @@ const jwt = require('jsonwebtoken');
 const M = require('./models');
 const { buildSystemInstruction, askGemini } = require('./ai');
 const { sendResetEmail, resetLinks } = require('./mailer');
+const { makeAuth } = require('./rbac');
+const { registerRoleRoutes } = require('./roleRoutes');
+const { applySecurity } = require('./security');
+const { makeAudit, registerAuditRoutes } = require('./audit');
+const { validate, schemas, isId } = require('./validate');
+const { sendError } = require('./errors');
 
 const app = express();
 app.set('trust proxy', 1);   // Render/Railway terminate HTTPS in front of the app
-app.use(cors());
+
+const audit = makeAudit(M);
+app.locals.audit = audit;    // lets requireRole log denied access
+
+// Request id: goes into the logs and into error responses so a problem can be traced.
+app.use((req, res, next) => { req.id = crypto.randomUUID(); res.set('X-Request-Id', req.id); next(); });
+
+applySecurity(app, { audit });   // Helmet security headers + rate limiting
+
+// CORS: the mobile app doesn't need it. To restrict browser access, set
+// CORS_ORIGINS=https://site-one.com,https://site-two.com
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors(corsOrigins.length ? { origin: corsOrigins } : undefined));
 app.use(express.json({ limit: '2mb' }));
 
-const sign = (u) => jwt.sign({ id: String(u._id) }, process.env.JWT_SECRET, { expiresIn: '30d' });
-const publicUser = (u) => ({ id: String(u._id), email: u.email, display_name: u.display_name, avatar_url: u.avatar_url });
+const sign = (u) => jwt.sign({ id: String(u._id) }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const publicUser = (u) => ({ id: String(u._id), email: u.email, display_name: u.display_name, avatar_url: u.avatar_url, role: u.role || 'user' });
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
-const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
-  console.error(e);
-  res.status(e.name === 'ValidationError' || e.name === 'CastError' ? 400 : 500).json({ error: e.message });
-});
+// Errors are passed to the safe handler at the bottom (details only in the server log).
+const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
-function auth(req, res, next) {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
-  try { req.userId = jwt.verify(token, process.env.JWT_SECRET).id; next(); }
-  catch { res.status(401).json({ error: 'Unauthorized' }); }
-}
+// Compared against when an email isn't found, so a missing account takes as long to answer as a wrong password.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password-0', 10);
+
+// Verifies the token, loads the user, and sets req.userId / req.role (see rbac.js).
+const auth = makeAuth({ User: M.User, jwt, secret: process.env.JWT_SECRET });
 
 // ---------- Auth ----------
-app.post('/auth/register', wrap(async (req, res) => {
+// Sign-up may only pick 'user' (vehicle owner) or 'mechanic'. Any other value, such as
+// 'admin', is refused and written to the audit log. Admins are made with
+// `npm run make-admin` or by another admin in the dashboard, never at sign-up.
+const SIGNUP_ROLES = ['user', 'mechanic'];
+function blockRoleEscalation(req, res, next) {
+  const asked = req.body && req.body.role;
+  if (asked !== undefined && asked !== null && !SIGNUP_ROLES.includes(asked)) {
+    audit(req, 'role_escalation_blocked', {
+      target_type: 'user',
+      detail: { requested_role: typeof asked === 'string' ? asked : typeof asked },
+    });
+    return res.status(400).json({ error: 'Role must be user or mechanic.' });
+  }
+  next();
+}
+
+app.post('/auth/register', blockRoleEscalation, validate(schemas.register), wrap(async (req, res) => {
   const { email, password, display_name } = req.body;
-  if (!email || !password || password.length < 6)
-    return res.status(400).json({ error: 'Email and a password of 6+ characters are required.' });
-  if (await M.User.findOne({ email: email.toLowerCase().trim() }))
+  const role = req.body.role || 'user';   // already checked: only 'user' or 'mechanic' get here
+  if (await M.User.findOne({ email }))
     return res.status(409).json({ error: 'Email already registered.' });
   const user = await M.User.create({
-    email, display_name, password_hash: await bcrypt.hash(password, 10),
+    email, display_name, role, password_hash: await bcrypt.hash(password, 10),
   });
+  audit(req, 'register', { user_id: user._id, target_type: 'user', target_id: user._id, detail: { role } });
   res.status(201).json({ token: sign(user), user: publicUser(user) });
 }));
 
-app.post('/auth/login', wrap(async (req, res) => {
-  const user = await M.User.findOne({ email: (req.body.email || '').toLowerCase().trim() });
-  if (!user || !user.password_hash || !(await bcrypt.compare(req.body.password || '', user.password_hash)))
+app.post('/auth/login', validate(schemas.login), wrap(async (req, res) => {
+  const { email, password } = req.body;
+  const user = await M.User.findOne({ email });
+  const matches = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
+  if (!user || !user.password_hash || !matches) {
+    audit(req, 'login_failed', { detail: { email } });
     return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+  audit(req, 'login_success', { user_id: user._id });
   res.json({ token: sign(user), user: publicUser(user) });
 }));
 
 // Forgot password: always answers 200 so nobody can probe which emails exist.
-app.post('/auth/forgot', wrap(async (req, res) => {
-  const user = await M.User.findOne({ email: (req.body.email || '').toLowerCase().trim() });
+app.post('/auth/forgot', validate(schemas.forgot), wrap(async (req, res) => {
+  const user = await M.User.findOne({ email: req.body.email });
+  audit(req, 'password_reset_requested', { user_id: user?._id, detail: { email: req.body.email } });
   if (user) {
     const token = crypto.randomBytes(32).toString('hex');
     await M.ResetToken.deleteMany({ user_id: user._id });
@@ -78,22 +116,23 @@ app.get('/reset-password', (req, res) => {
 <script>location.href=${JSON.stringify(deepLink)}</script></body></html>`);
 });
 
-app.post('/auth/reset', wrap(async (req, res) => {
+app.post('/auth/reset', validate(schemas.reset), wrap(async (req, res) => {
   const { token, password } = req.body;
-  if (!token || !password || password.length < 6)
-    return res.status(400).json({ error: 'Token and a password of 6+ characters are required.' });
   const rec = await M.ResetToken.findOne({ token_hash: sha(token), expires_at: { $gt: new Date() } });
-  if (!rec) return res.status(400).json({ error: 'Reset link is invalid or has expired.' });
+  if (!rec) {
+    audit(req, 'password_reset_failed');
+    return res.status(400).json({ error: 'Reset link is invalid or has expired.' });
+  }
   await M.User.findByIdAndUpdate(rec.user_id, { password_hash: await bcrypt.hash(password, 10) });
   await rec.deleteOne();
+  audit(req, 'password_reset_completed', { user_id: rec.user_id });
   res.json({ ok: true });
 }));
 
 // Change password while logged in (replaces supabase.auth.updateUser)
-app.put('/auth/password', auth, wrap(async (req, res) => {
-  if (!req.body.password || req.body.password.length < 6)
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+app.put('/auth/password', auth, validate(schemas.password), wrap(async (req, res) => {
   await M.User.findByIdAndUpdate(req.userId, { password_hash: await bcrypt.hash(req.body.password, 10) });
+  audit(req, 'password_changed');
   res.json({ ok: true });
 }));
 
@@ -103,12 +142,13 @@ app.get('/me', auth, wrap(async (req, res) => {
   user ? res.json(publicUser(user)) : res.status(404).json({ error: 'Not found' });
 }));
 
-app.put('/me', auth, wrap(async (req, res) => {
+app.put('/me', auth, validate(schemas.profile, { partial: true }), wrap(async (req, res) => {
   const { display_name, avatar_url } = req.body;
   const update = {};
   if (display_name !== undefined) update.display_name = display_name;
   if (avatar_url !== undefined) update.avatar_url = avatar_url;
   const user = await M.User.findByIdAndUpdate(req.userId, update, { new: true });
+  audit(req, 'profile_updated', { detail: { fields: Object.keys(update).join(',') } });
   res.json(publicUser(user));
 }));
 
@@ -178,13 +218,17 @@ app.delete('/files/:id', auth, wrap(async (req, res) => {
 }));
 
 // ---------- CRUD, always limited to the logged-in user's own records ----------
-function crud(path, Model, { child = false } = {}) {
+function crud(path, Model, { child = false, schema } = {}) {
+  const name = path.slice(1);   // used in the audit log, e.g. 'vehicles'
   const r = express.Router();
   r.use(auth);
 
   r.get('/', wrap(async (req, res) => {
     const filter = { user_id: req.userId };
-    if (req.query.vehicle_id) filter.vehicle_id = req.query.vehicle_id;
+    if (req.query.vehicle_id !== undefined) {
+      if (!isId(req.query.vehicle_id)) return res.status(400).json({ error: 'Invalid vehicle_id.' });
+      filter.vehicle_id = req.query.vehicle_id;
+    }
     res.json(await Model.find(filter).sort({ created_at: -1 }));
   }));
 
@@ -194,32 +238,37 @@ function crud(path, Model, { child = false } = {}) {
     doc ? res.json(doc) : res.status(404).json({ error: 'Not found' });
   }));
 
-  r.post('/', wrap(async (req, res) => {
-    const { id, _id, user_id, ...data } = req.body;
+  r.post('/', validate(schema), wrap(async (req, res) => {
+    const { id, _id, user_id, added_by, added_by_name, ...data } = req.body;
     if (child) {
       const ok = mongoose.isValidObjectId(data.vehicle_id) &&
         await M.Vehicle.exists({ _id: data.vehicle_id, user_id: req.userId });
       if (!ok) return res.status(400).json({ error: 'Unknown vehicle.' });
     }
-    res.status(201).json(await Model.create({ ...data, user_id: req.userId }));
+    const created = await Model.create({ ...data, user_id: req.userId });
+    audit(req, 'record_created', { target_type: name, target_id: created._id });
+    res.status(201).json(created);
   }));
 
-  r.put('/:id', wrap(async (req, res) => {
+  r.put('/:id', validate(schema, { partial: true }), wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' });
-    const { id, _id, user_id, vehicle_id, ...data } = req.body;
+    const { id, _id, user_id, vehicle_id, added_by, added_by_name, ...data } = req.body;
     const doc = await Model.findOneAndUpdate({ _id: req.params.id, user_id: req.userId }, data, { new: true, runValidators: true });
-    doc ? res.json(doc) : res.status(404).json({ error: 'Not found' });
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    audit(req, 'record_updated', { target_type: name, target_id: doc._id });
+    res.json(doc);
   }));
 
   r.delete('/:id', wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const doc = await Model.findOneAndDelete({ _id: req.params.id, user_id: req.userId });
     if (!doc) return res.status(404).json({ error: 'Not found' });
+    audit(req, 'record_deleted', { target_type: name, target_id: doc._id });
     if (Model === M.Vehicle) {   // deleting a vehicle removes its records and uploaded files too
       const q = { vehicle_id: doc._id };
       const [docs, reps] = await Promise.all([M.Document.find(q), M.Repair.find(q)]);
       await deleteStoredFiles(req.userId, [...docs.map((d) => d.file_path), ...reps.map((r) => r.proof_file_path)]);
-      await Promise.all([M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document].map((m) => m.deleteMany(q)));
+      await Promise.all([M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document, M.VehicleShare].map((m) => m.deleteMany(q)));
     }
     if (Model === M.Document) await deleteStoredFiles(req.userId, [doc.file_path]);
     if (Model === M.Repair) await deleteStoredFiles(req.userId, [doc.proof_file_path]);
@@ -229,11 +278,15 @@ function crud(path, Model, { child = false } = {}) {
   app.use(path, r);
 }
 
-crud('/vehicles', M.Vehicle);
-crud('/maintenance_records', M.MaintenanceRecord, { child: true });
-crud('/repairs', M.Repair, { child: true });
-crud('/parts_replacements', M.PartsReplacement, { child: true });
-crud('/documents', M.Document, { child: true });
+// Sharing, mechanic and admin routes (roles). Registered before the generic CRUD routes.
+registerRoleRoutes(app, { M, auth, wrap, audit });
+registerAuditRoutes(app, { M, auth, wrap });
+
+crud('/vehicles', M.Vehicle, { schema: schemas.vehicle });
+crud('/maintenance_records', M.MaintenanceRecord, { child: true, schema: schemas.maintenance });
+crud('/repairs', M.Repair, { child: true, schema: schemas.repair });
+crud('/parts_replacements', M.PartsReplacement, { child: true, schema: schemas.part });
+crud('/documents', M.Document, { child: true, schema: schemas.document });
 
 // ---------- AI chat ----------
 // The server loads the vehicle's records itself, so the app only sends
@@ -290,11 +343,14 @@ app.post('/ai-chat', auth, wrap(async (req, res) => {
 
 app.get('/health', (_, res) => res.json({ ok: true }));
 
-// Body-parser errors (file too big, malformed JSON) answered as JSON, not HTML.
+// Unknown routes
+app.use((req, res) => res.status(404).json({ error: 'Not found.' }));
+
+// Every error ends up here: full details go to the server log only, never to the app.
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
-  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'File is too large (8 MB max).' });
-  res.status(err.status || 500).json({ error: err.status && err.status < 500 ? err.message : 'Server error.' });
+  const { status, body } = sendError(err, req);
+  res.status(status).json(body);
 });
 
 mongoose.connect(process.env.MONGODB_URI)

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema, model } = mongoose;
+const { ROLES } = require('./rbac');
 
 // Field names match what the app already sends/reads (snake_case, same as Supabase).
 const TS = { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } };
@@ -27,6 +28,7 @@ const User = model('User', clean(new Schema({
   password_hash: String,          // empty for imported profiles that haven't set a password
   display_name: String,           // from profiles.display_name
   avatar_url: String,             // from profiles.avatar_url
+  role: { type: String, enum: ROLES, default: 'user', index: true },   // user | mechanic | admin
   legacy_id: { type: String, index: true },   // old Supabase user UUID
 }, TS)));
 
@@ -55,6 +57,8 @@ const MaintenanceRecord = model('MaintenanceRecord', clean(new Schema({
   shop_name: String,
   parts_replaced: String,
   notes: String,
+  added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
+  added_by_name: String,
 }, TS)), 'maintenance_records');
 
 const Repair = model('Repair', clean(new Schema({
@@ -69,6 +73,8 @@ const Repair = model('Repair', clean(new Schema({
   proof_file_path: String,        // id of the uploaded receipt/work-order photo (see StoredFile)
   proof_file_name: String,
   notes: String,
+  added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
+  added_by_name: String,
 }, TS)), 'repairs');
 
 const PartsReplacement = model('PartsReplacement', clean(new Schema({
@@ -104,6 +110,29 @@ const StoredFile = model('StoredFile', new Schema({
   data: { type: Buffer, required: true, select: false },   // not loaded unless asked for
 }, TS), 'files');
 
+// An owner lets a mechanic see one vehicle and add service records to it.
+const vehicleShareSchema = new Schema({
+  owner_id: owner,
+  vehicle_id: vehicleRef,
+  mechanic_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+}, TS);
+vehicleShareSchema.index({ vehicle_id: 1, mechanic_id: 1 }, { unique: true });
+const VehicleShare = model('VehicleShare', clean(vehicleShareSchema), 'vehicle_shares');
+
+// Security events (logins, role changes, deletions, ...). Deleted automatically after 180 days.
+const AuditLog = model('AuditLog', clean(new Schema({
+  action: { type: String, required: true, index: true },
+  user_id: { type: Schema.Types.ObjectId, index: true },   // who did it, when logged in
+  role: String,
+  target_type: String,
+  target_id: String,
+  ip: String,
+  user_agent: String,
+  request_id: String,
+  detail: Schema.Types.Mixed,
+  created_at: { type: Date, default: Date.now, index: { expireAfterSeconds: 60 * 60 * 24 * 180 } },
+}, { versionKey: false })), 'audit_logs');
+
 // Password-reset tokens. Mongo deletes them automatically once expires_at passes.
 const ResetToken = model('ResetToken', new Schema({
   user_id: owner,
@@ -113,5 +142,5 @@ const ResetToken = model('ResetToken', new Schema({
 
 module.exports = {
   User, Vehicle, MaintenanceRecord, Repair, PartsReplacement,
-  Document: VehicleDocument, ResetToken, StoredFile,
+  Document: VehicleDocument, ResetToken, StoredFile, VehicleShare, AuditLog,
 };

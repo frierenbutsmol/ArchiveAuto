@@ -80,6 +80,12 @@ export default function ProfileScreen() {
       onPress: () => navigation.navigate('Settings'),
     },
     {
+      id: 'share',
+      icon: 'share-social-outline',
+      label: 'Share with mechanic',
+      onPress: () => navigation.navigate('ShareVehicle'),
+    },
+    {
       id: 'faq',
       icon: 'help-circle-outline',
       label: 'Help & ArchiveAuto FAQ',

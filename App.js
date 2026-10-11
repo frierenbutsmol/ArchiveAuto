@@ -25,12 +25,19 @@ import PartsReplacement from './components/PartsReplacement';
 import AddPart from './components/AddPart';
 import VehicleDocuments from './components/VehicleDocuments';
 import AddDocument from './components/AddDocument';
+import MechanicTabs from './components/role/MechanicTabs';
+import MechanicVehicleDetail from './components/role/MechanicVehicleDetail';
+import MechanicAddRecord from './components/role/MechanicAddRecord';
+import AdminTabs from './components/role/AdminTabs';
+import ShareVehicle from './components/role/ShareVehicle';
+import { routeForRole } from './lib/roles';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const navigationRef = useRef(null);
-  // null while we check for a saved login; then 'MainTabs' (logged in) or 'SignIn'.
+  // null while we check for a saved login; then the role's start screen
+  // ('MainTabs' | 'MechanicTabs' | 'AdminTabs') or 'SignIn'.
   const [initialRoute, setInitialRoute] = useState(null);
 
   // Reset links look like: archiveauto://reset-password?token=XXXX
@@ -47,10 +54,20 @@ export default function App() {
 
   useEffect(() => {
     // Skip the Sign In screen when a login token is already saved.
-    api.auth
-      .hasSession()
-      .then((has) => setInitialRoute(has ? 'MainTabs' : 'SignIn'))
-      .catch(() => setInitialRoute('SignIn'));
+    // Ask the server for the current role, so a role change made by an admin
+    // takes effect on the next app start. Offline: fall back to the last known role.
+    (async () => {
+      try {
+        if (!(await api.auth.hasSession())) return setInitialRoute('SignIn');
+        const { data, error } = await api.auth.getUser();
+        if (data?.user) return setInitialRoute(routeForRole(data.user.role));
+        if (error?.status === 401) return setInitialRoute('SignIn');
+        const cached = await api.auth.cachedRole();
+        setInitialRoute(routeForRole(cached));
+      } catch {
+        setInitialRoute('SignIn');
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -106,6 +123,32 @@ export default function App() {
         <Stack.Screen
           name="MainTabs"
           component={MainTabs}
+        />
+
+        <Stack.Screen
+          name="MechanicTabs"
+          component={MechanicTabs}
+        />
+
+        <Stack.Screen
+          name="MechanicVehicleDetail"
+          component={MechanicVehicleDetail}
+        />
+
+        <Stack.Screen
+          name="MechanicAddRecord"
+          component={MechanicAddRecord}
+          options={{ presentation: 'modal' }}
+        />
+
+        <Stack.Screen
+          name="AdminTabs"
+          component={AdminTabs}
+        />
+
+        <Stack.Screen
+          name="ShareVehicle"
+          component={ShareVehicle}
         />
 
         <Stack.Screen

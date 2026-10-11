@@ -222,11 +222,22 @@ export default function GarageScreen({ navigation }) {
                     </View>
                   </View>
 
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={isSelected ? COLORS.primary : COLORS.textMuted}
-                  />
+                  <View style={{ alignItems: 'center' }}>
+                    {/* Owner: share this vehicle with a mechanic */}
+                    <TouchableOpacity
+                      onPress={() =>
+                        navigation.navigate('ShareVehicle', { vehicleId: vehicle.id, vehicleName: vehicle.name })
+                      }
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ marginBottom: 10 }}>
+                      <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={20}
+                      color={isSelected ? COLORS.primary : COLORS.textMuted}
+                    />
+                  </View>
                 </View>
               </Touchable>
             );
