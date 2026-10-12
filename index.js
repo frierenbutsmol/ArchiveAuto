@@ -1,5 +1,6 @@
 import { registerRootComponent } from 'expo';
 
+import './lib/webAlert';   // makes Alert.alert work in a web browser (does nothing on phones)
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
