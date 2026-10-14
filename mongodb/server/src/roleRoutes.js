@@ -28,6 +28,17 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
   const mechanicOnly = [auth, requireRole('mechanic')];
   const adminOnly = [auth, requireRole('admin')];
 
+  // ---------- Registered mechanics, for the shop/mechanic picker in the Add forms ----------
+  // Any logged-in user can read this, but it only returns an id and a display name (never emails).
+  app.get('/mechanics', auth, wrap(async (req, res) => {
+    const rows = await M.User.find({
+      role: 'mechanic',
+      email_verified: { $ne: false },          // unverified sign-ups are not listed
+      display_name: { $exists: true, $ne: '' },
+    }).select('display_name').sort({ display_name: 1 }).limit(200);
+    res.json(rows.map((u) => ({ id: String(u._id), display_name: u.display_name })));
+  }));
+
   // ---------- Owner: share a vehicle with a mechanic ----------
   const ownedVehicle = (req) =>
     isId(req.params.id) ? M.Vehicle.findOne({ _id: req.params.id, user_id: req.userId }) : null;
@@ -177,7 +188,7 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
 
     const own = { user_id: user._id };
     await Promise.all([
-      M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document, M.StoredFile, M.ResetToken, M.Vehicle,
+      M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document, M.StoredFile, M.ResetToken, M.VerifyToken, M.Vehicle,
     ].map((m) => m.deleteMany(own)));
     await M.VehicleShare.deleteMany({ owner_id: user._id });
     await M.VehicleShare.deleteMany({ mechanic_id: user._id });

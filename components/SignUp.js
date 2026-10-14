@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import { emailError } from '../lib/validators';
 import { routeForRole } from '../lib/roles';
 
 export default function SignUp() {
@@ -25,6 +26,9 @@ export default function SignUp() {
   const [role, setRole] = useState('user');   // 'user' = vehicle owner, or 'mechanic'
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailMsg = emailError(email);
+  const showEmailError = emailTouched && !!emailMsg;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -64,11 +68,9 @@ export default function SignUp() {
     }
 
     // Check email
-    if (!email.trim()) {
-      Alert.alert(
-        'Missing Email',
-        'Please enter your email address.'
-      );
+    if (emailMsg) {
+      setEmailTouched(true);
+      Alert.alert(email.trim() ? 'Invalid Email' : 'Missing Email', emailMsg);
       return;
     }
 
@@ -140,6 +142,25 @@ export default function SignUp() {
       return;
     }
 
+    // New accounts must verify their email first, so send them to Log In instead of the app.
+    if (data?.needsVerification) {
+      Alert.alert(
+        'Verify your email',
+        data.emailSent
+          ? `We sent a verification link to ${email.trim()}. Open it, then log in.`
+          : `Your account was created, but we could not send the email to ${email.trim()}. On the login screen, try to log in and tap "Resend email".`,
+        [{
+          text: 'OK',
+          onPress: () => navigation.reset({
+            index: 0,
+            routes: [{ name: 'SignIn', params: { verifyEmail: email.trim() } }],
+          }),
+        }],
+        { cancelable: false }
+      );
+      return;
+    }
+
     if (!data?.user) {
       Alert.alert(
         'Sign Up Failed',
@@ -177,11 +198,7 @@ export default function SignUp() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={
-          Platform.OS === 'ios'
-            ? 'padding'
-            : undefined
-        }
+        behavior="padding"
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -305,7 +322,7 @@ export default function SignUp() {
               Email address
             </Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showEmailError && styles.inputRowError]}>
               <Ionicons
                 name="mail-outline"
                 size={20}
@@ -319,11 +336,13 @@ export default function SignUp() {
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
                 onChangeText={setEmail}
+                onBlur={() => setEmailTouched(true)}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
+            {showEmailError && <Text style={styles.errorText}>{emailMsg}</Text>}
 
             {/* Password */}
             <Text
@@ -659,6 +678,14 @@ const styles = StyleSheet.create({
     height: 50,
   },
 
+  inputRowError: {
+    borderColor: COLORS.danger,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: 6,
+  },
   inputIcon: {
     marginRight: SPACING.sm,
   },

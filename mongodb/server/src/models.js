@@ -29,6 +29,9 @@ const User = model('User', clean(new Schema({
   display_name: String,           // from profiles.display_name
   avatar_url: String,             // from profiles.avatar_url
   role: { type: String, enum: ROLES, default: 'user', index: true },   // user | mechanic | admin
+  // false until the link in the sign-up email is opened. No default on purpose: accounts that
+  // existed before this field was added have no value and are treated as already verified.
+  email_verified: Boolean,
   legacy_id: { type: String, index: true },   // old Supabase user UUID
 }, TS)));
 
@@ -140,7 +143,14 @@ const ResetToken = model('ResetToken', new Schema({
   expires_at: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
 }, TS));
 
+// Email-verification tokens (sent at sign-up). Mongo deletes them automatically after 24 hours.
+const VerifyToken = model('VerifyToken', new Schema({
+  user_id: owner,
+  token_hash: { type: String, required: true, index: true },
+  expires_at: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
+}, TS));
+
 module.exports = {
   User, Vehicle, MaintenanceRecord, Repair, PartsReplacement,
-  Document: VehicleDocument, ResetToken, StoredFile, VehicleShare, AuditLog,
+  Document: VehicleDocument, ResetToken, VerifyToken, StoredFile, VehicleShare, AuditLog,
 };

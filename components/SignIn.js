@@ -17,22 +17,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 import { routeForRole } from '../lib/roles';
+import { emailError } from '../lib/validators';
 
-export default function SignIn({ navigation }) {
-  const [email, setEmail] = useState('');
+export default function SignIn({ navigation, route }) {
+  const [email, setEmail] = useState(route?.params?.verifyEmail || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  // Errors appear after the field is left (or after the first tap on LogIn),
+  // then update live while the user keeps typing.
+  const emailMsg = emailError(email);
+  const showEmailError = (emailTouched || submitted) && !!emailMsg;
+  const showPasswordError = submitted && !password;
 
   const handleSignIn = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert(
-        'Missing Information',
-        'Please enter your email and password.'
-      );
-      return;
-    }
+    setSubmitted(true);
+    if (emailMsg || !password) return;   // inline messages explain what is wrong
 
     setLoading(true);
 
@@ -44,6 +48,22 @@ export default function SignIn({ navigation }) {
     setLoading(false);
 
     if (error) {
+      if (error.code === 'email_not_verified') {
+        Alert.alert('Verify your email', error.message, [
+          { text: 'OK', style: 'cancel' },
+          {
+            text: 'Resend email',
+            onPress: async () => {
+              const r = await api.auth.resendVerification(email.trim());
+              Alert.alert(
+                r.error ? 'Could not send' : 'Email sent',
+                r.error ? r.error.message : 'Check your inbox (and spam folder) for the new link.'
+              );
+            },
+          },
+        ]);
+        return;
+      }
       Alert.alert('Login Failed', error.message);
       return;
     }
@@ -61,7 +81,7 @@ export default function SignIn({ navigation }) {
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior="padding">
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -84,7 +104,7 @@ export default function SignIn({ navigation }) {
           {/* Form */}
           <View style={styles.form}>
             <Text style={styles.label}>Email address</Text>
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showEmailError && styles.inputRowError]}>
               <Ionicons
                 name="mail-outline"
                 size={20}
@@ -97,17 +117,19 @@ export default function SignIn({ navigation }) {
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
                 onChangeText={setEmail}
+                onBlur={() => setEmailTouched(true)}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoCorrect={false}
               />
             </View>
+            {showEmailError && <Text style={styles.errorText}>{emailMsg}</Text>}
 
             <Text style={[styles.label, { marginTop: SPACING.lg }]}>
               Password
             </Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showPasswordError && styles.inputRowError]}>
               <Ionicons
                 name="lock-closed-outline"
                 size={20}
@@ -135,6 +157,7 @@ export default function SignIn({ navigation }) {
                 />
               </TouchableOpacity>
             </View>
+            {showPasswordError && <Text style={styles.errorText}>Password is required.</Text>}
 
             <View style={styles.optionsRow}>
               <TouchableOpacity
@@ -263,6 +286,14 @@ const styles = StyleSheet.create({
     borderRadius: RADII.input,
     paddingHorizontal: SPACING.lg,
     height: 50,
+  },
+  inputRowError: {
+    borderColor: COLORS.danger,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: 6,
   },
   inputIcon: {
     marginRight: SPACING.sm,

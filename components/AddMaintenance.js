@@ -19,6 +19,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import MechanicSuggestions from './MechanicSuggestions';
 
 // Fixed height of the app bar itself (status bar space is added via marginTop).
 const TOP_BAR_HEIGHT = 64;
@@ -78,7 +79,10 @@ export default function AddMaintenance() {
   const { useMetric } = useSettings();
   const MILEAGE_UNIT = distanceUnit(useMetric);
   // The Alerts screen can open this form pre-set to a service type.
-  const [serviceType, setServiceType] = useState(route?.params?.serviceType || 'Oil Change');
+  // Several categories can be ticked at once (checkboxes).
+  const [serviceTypes, setServiceTypes] = useState([route?.params?.serviceType || 'Oil Change']);
+  const toggleServiceType = (type) =>
+    setServiceTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]));
   const [taskName, setTaskName] = useState('');
   const [date, setDate] = useState(todayISO());
   const [mileage, setMileage] = useState('');
@@ -89,7 +93,7 @@ export default function AddMaintenance() {
   const [focusedField, setFocusedField] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const canSave = taskName.trim() !== '' && mileage.trim() !== '';
+  const canSave = serviceTypes.length > 0 && taskName.trim() !== '' && mileage.trim() !== '';
 
   const handleCancel = () => {
     if (navigation.canGoBack()) {
@@ -129,7 +133,7 @@ export default function AddMaintenance() {
 
       const { data, error } = await api.create('maintenance_records', {
           vehicle_id: vehicle.id,
-          maintenance_type: serviceType,
+          maintenance_type: serviceTypes.join(', '),   // e.g. "Oil Change, Brakes"
           description: taskName.trim(),
           service_date: serviceDate,
           mileage: displayToKm(mileageValue, useMetric),
@@ -183,7 +187,7 @@ export default function AddMaintenance() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -203,25 +207,29 @@ export default function AddMaintenance() {
             {/* Service Category */}
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>SERVICE CATEGORY</Text>
-              <View style={styles.chipsRow}>
+              <View style={styles.checkGrid}>
                 {SERVICE_TYPES.map((type) => {
-                  const selected = serviceType === type;
+                  const checked = serviceTypes.includes(type);
                   return (
                     <Touchable
                       key={type}
-                      style={[styles.chip, selected && styles.chipActive]}
-                      onPress={() => setServiceType(type)}
+                      style={[styles.checkRow, checked && styles.checkRowActive]}
+                      onPress={() => toggleServiceType(type)}
                       rippleColor="rgba(55, 194, 223, 0.15)"
                     >
-                      <View style={styles.chipInner}>
-                        <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-                          {type}
-                        </Text>
+                      <View style={styles.checkRowInner}>
+                        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                          {checked && <MaterialIcons name="check" size={14} color={COLORS.textInverse} />}
+                        </View>
+                        <Text style={[styles.checkLabel, checked && styles.checkLabelActive]}>{type}</Text>
                       </View>
                     </Touchable>
                   );
                 })}
               </View>
+              {serviceTypes.length === 0 && (
+                <Text style={styles.checkError}>Pick at least one category.</Text>
+              )}
             </View>
 
             {/* Task Name */}
@@ -318,6 +326,7 @@ export default function AddMaintenance() {
                 underlineColorAndroid="transparent"
                 selectionColor={COLORS.primary}
               />
+              <MechanicSuggestions value={shopName} onSelect={setShopName} />
             </View>
 
             {/* Parts Replaced */}
@@ -490,6 +499,56 @@ const styles = StyleSheet.create({
   },
   requiredAsterisk: {
     color: COLORS.primary,
+  },
+  checkGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  checkRow: {
+    width: '48%',
+    borderRadius: RADII.input,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  checkRowActive: {
+    backgroundColor: COLORS.primaryMuted,
+    borderColor: COLORS.primary,
+  },
+  checkRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  checkLabel: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  checkLabelActive: {
+    color: COLORS.primary,
+  },
+  checkError: {
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: 6,
   },
   chipsRow: {
     flexDirection: 'row',

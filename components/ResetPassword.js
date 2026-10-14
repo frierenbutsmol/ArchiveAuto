@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import { emailError } from '../lib/validators';
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
@@ -50,11 +51,15 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
 
 export default function ResetPassword({ navigation }) {
   const [email, setEmail] = useState('');
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailMsg = emailError(email);
+  const showEmailError = emailTouched && !!emailMsg;
   const [loading, setLoading] = useState(false);
 
   const handleSendResetLink = async () => {
-    if (!email.trim()) {
-      Alert.alert('Email Required', 'Please enter your email address.');
+    if (emailMsg) {
+      setEmailTouched(true);
+      Alert.alert(email.trim() ? 'Invalid Email' : 'Email Required', emailMsg);
       return;
     }
 
@@ -95,7 +100,7 @@ export default function ResetPassword({ navigation }) {
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior="padding">
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -133,7 +138,7 @@ export default function ResetPassword({ navigation }) {
           <View style={styles.form}>
             <Text style={styles.label}>Email address</Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showEmailError && styles.inputRowError]}>
               <Ionicons
                 name="mail-outline"
                 size={20}
@@ -147,11 +152,13 @@ export default function ResetPassword({ navigation }) {
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
                 onChangeText={setEmail}
+                onBlur={() => setEmailTouched(true)}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoCorrect={false}
               />
             </View>
+            {showEmailError && <Text style={styles.errorText}>{emailMsg}</Text>}
 
             <Text style={styles.infoText}>
               We'll send a link to your email that will let you create a new password.
@@ -278,6 +285,14 @@ const styles = StyleSheet.create({
     height: 50,
   },
 
+  inputRowError: {
+    borderColor: COLORS.danger,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: 6,
+  },
   inputIcon: {
     marginRight: SPACING.sm,
   },

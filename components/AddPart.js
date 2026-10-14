@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   SafeAreaView,
+  KeyboardAvoidingView,
   View,
   Text,
   StyleSheet,
@@ -245,6 +246,7 @@ export default function AddPart({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -364,6 +366,7 @@ export default function AddPart({ navigation }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

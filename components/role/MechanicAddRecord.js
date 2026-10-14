@@ -68,7 +68,7 @@ export default function MechanicAddRecord() {
         subtitle={vehicleName}
         onBack={() => navigation.goBack()}
       />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
           <Text style={[ui.label, { marginTop: 0 }]}>{isRepair ? 'Repair type' : 'Service type'}</Text>
           {isRepair ? (

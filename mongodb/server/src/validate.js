@@ -131,7 +131,10 @@ const schemas = {
   },
   forgot: { email: { rule: email(), required: true } },
   reset: { token: { rule: hex64(), required: true }, password: { rule: newPassword(), required: true } },
-  password: { password: { rule: newPassword(), required: true } },
+  password: {
+    current_password: { rule: (v) => { if (typeof v !== 'string' || !v || v.length > 128) fail('Enter your current password.'); return v; }, required: true },
+    password: { rule: newPassword(), required: true },
+  },
   profile: { display_name: text({ max: 60 }), avatar_url: text({ max: 500 }) },
 
   vehicle: {

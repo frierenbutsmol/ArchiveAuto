@@ -78,7 +78,7 @@ export default function ShareVehicle() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader title="Share with mechanic" subtitle={vehicleId ? title : 'Choose a vehicle'} onBack={() => navigation.goBack()} />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView contentContainerStyle={ui.content} keyboardShouldPersistTaps="handled">
           <ErrorBanner message={error} />
 

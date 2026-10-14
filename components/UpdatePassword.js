@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   SafeAreaView,
+  KeyboardAvoidingView,
   View,
   Text,
   Image,
@@ -41,6 +42,10 @@ const REQUIREMENTS = [
 export default function UpdatePassword({ navigation, route }) {
   // Set when the user arrives from a reset link: archiveauto://reset-password?token=...
   const resetToken = route?.params?.token;
+  // Changing the password while logged in needs the current one; a reset link does not.
+  const needsCurrent = !resetToken;
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -61,8 +66,14 @@ export default function UpdatePassword({ navigation, route }) {
   const passwordsMatch =
     password.length > 0 && password === confirmPassword;
 
+  const sameAsCurrent =
+    needsCurrent && password.length > 0 && password === currentPassword;
+
   const canSubmit =
-    allMet && passwordsMatch && !loading;
+    allMet &&
+    passwordsMatch &&
+    (!needsCurrent || (currentPassword.length > 0 && !sameAsCurrent)) &&
+    !loading;
 
   const handleResetPassword = async () => {
     if (!canSubmit) return;
@@ -71,7 +82,7 @@ export default function UpdatePassword({ navigation, route }) {
 
     const { error } = resetToken
       ? await api.auth.resetPassword(resetToken, password)
-      : await api.auth.updatePassword(password);
+      : await api.auth.updatePassword(currentPassword, password);
 
     setLoading(false);
 
@@ -89,7 +100,8 @@ export default function UpdatePassword({ navigation, route }) {
       [
         {
           text: 'Continue',
-          onPress: () => {
+          onPress: async () => {
+            if (!resetToken) await api.auth.signOut();   // log in again with the new password
             navigation.reset({
               index: 0,
               routes: [{ name: 'SignIn' }],
@@ -107,8 +119,10 @@ export default function UpdatePassword({ navigation, route }) {
         backgroundColor={COLORS.background}
       />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
         bounces={false}
       >
         {/* Header */}
@@ -146,18 +160,58 @@ export default function UpdatePassword({ navigation, route }) {
             </Text>
 
             <Text style={styles.title}>
-              Reset password
+              {needsCurrent ? 'Change password' : 'Reset password'}
             </Text>
 
             <Text style={styles.subtitle}>
-              Create a new secure password for your account
+              {needsCurrent
+                ? 'Enter your current password, then choose a new one'
+                : 'Create a new secure password for your account'}
             </Text>
           </View>
         </View>
 
         {/* Form */}
         <View style={styles.form}>
-          <Text style={styles.label}>
+          {needsCurrent && (
+            <>
+              <Text style={styles.label}>
+                Current password
+              </Text>
+
+              <View style={styles.inputRow}>
+                <Ionicons
+                  name="key-outline"
+                  size={20}
+                  color={COLORS.textMuted}
+                  style={styles.inputIcon}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry={!showCurrentPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <TouchableOpacity
+                  onPress={() => setShowCurrentPassword((v) => !v)}
+                >
+                  <Ionicons
+                    name={showCurrentPassword ? 'eye-outline' : 'eye-off-outline'}
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          <Text style={[styles.label, needsCurrent && { marginTop: SPACING.lg }]}>
             New password
           </Text>
 
@@ -284,6 +338,12 @@ export default function UpdatePassword({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
+          {sameAsCurrent && (
+            <Text style={styles.mismatchText}>
+              New password must be different from the current one
+            </Text>
+          )}
+
           {confirmPassword.length > 0 &&
             !passwordsMatch && (
               <Text style={styles.mismatchText}>
@@ -309,6 +369,7 @@ export default function UpdatePassword({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

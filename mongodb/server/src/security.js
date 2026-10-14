@@ -42,6 +42,14 @@ function applySecurity(app, { audit } = {}) {
     name: 'forgot', audit, windowMs: 60 * MINUTE, limit: num('RATE_LIMIT_FORGOT', 5),
     message: 'Too many reset requests. Please try again in an hour.',
   }));
+  app.use('/auth/resend-verification', limiter({
+    name: 'resend_verification', audit, windowMs: 60 * MINUTE, limit: num('RATE_LIMIT_RESEND', 5),
+    message: 'Too many verification emails requested. Please try again in an hour.',
+  }));
+  app.use('/auth/password', limiter({
+    name: 'change_password', audit, windowMs: 15 * MINUTE, limit: num('RATE_LIMIT_CHANGE_PASSWORD', 10), skipSuccessfulRequests: true,
+    message: 'Too many attempts. Please try again in 15 minutes.',
+  }));
   app.use('/auth/reset', limiter({
     name: 'reset', audit, windowMs: 60 * MINUTE, limit: num('RATE_LIMIT_RESET', 10),
     message: 'Too many attempts. Please try again later.',

@@ -18,6 +18,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import MechanicSuggestions from './MechanicSuggestions';
 import * as DocumentPicker from 'expo-document-picker';
 
 const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -82,10 +83,12 @@ export default function AddRepair({ navigation, route }) {
   const currentTypeConfig = REPAIR_TYPES.find((t) => t.id === repairType);
   const requiresProof = currentTypeConfig?.requiresProof;
 
-  const canSave =
-    title.trim() !== '' &&
-    odometer.trim() !== '' &&
-    (!requiresProof || hasPhoto);
+  // What is still missing, so the Save button can say so instead of silently greying out.
+  const missing = [];
+  if (!title.trim()) missing.push('repair description');
+  if (!odometer.trim()) missing.push('odometer');
+  if (requiresProof && !hasPhoto) missing.push('receipt photo or PDF');
+  const canSave = missing.length === 0;
 
   // Tap to choose a receipt photo or PDF; tap again to remove it.
   const pickProof = async () => {
@@ -116,6 +119,24 @@ export default function AddRepair({ navigation, route }) {
     } catch {
       Alert.alert('File Selection Failed', 'Could not select the file.');
     }
+  };
+
+  // Save button: explain what is missing, or ask for confirmation before saving.
+  const handleConfirm = () => {
+    if (saving) return;
+    if (!canSave) {
+      Alert.alert('Almost there', `Please add: ${missing.join(', ')}.`);
+      return;
+    }
+    const costText = cost.trim() ? `\nCost: ₱${cost.trim()}` : '';
+    Alert.alert(
+      'Save this repair?',
+      `${title.trim()}\n${repairType}\nOdometer: ${odometer} ${distanceUnit(useMetric)}${costText}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Save', onPress: handleSave },
+      ]
+    );
   };
 
   const handleSave = async () => {
@@ -201,7 +222,7 @@ export default function AddRepair({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -273,6 +294,7 @@ export default function AddRepair({ navigation, route }) {
               selectionColor={COLORS.primary}
               underlineColorAndroid="transparent"
             />
+            <MechanicSuggestions value={shopName} onSelect={setShopName} />
           </View>
 
           {/* Odometer & Cost */}
@@ -375,11 +397,17 @@ export default function AddRepair({ navigation, route }) {
             />
           </View>
 
-          {/* Save */}
+        </ScrollView>
+
+        {/* Pinned footer: always visible, even with the keyboard open */}
+        <View style={styles.footer}>
+          {!canSave && (
+            <Text style={styles.footerHint}>Still needed: {missing.join(', ')}</Text>
+          )}
           <Touchable
             style={[styles.saveButton, (!canSave || saving) && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={!canSave || saving}
+            onPress={handleConfirm}
+            disabled={saving}
             rippleColor="rgba(0,0,0,0.15)"
           >
             <View style={styles.saveButtonInner}>
@@ -389,8 +417,7 @@ export default function AddRepair({ navigation, route }) {
               </Text>
             </View>
           </Touchable>
-
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -569,7 +596,7 @@ const styles = StyleSheet.create({
   saveButton: {
     borderRadius: RADII.button,
     backgroundColor: COLORS.primary,
-    marginTop: SPACING.md,
+    marginTop: SPACING.xs,
     ...Platform.select({
       android: { elevation: 3 },
       ios: {
@@ -581,6 +608,20 @@ const styles = StyleSheet.create({
     }),
   },
   saveButtonDisabled: { opacity: 0.4 },
+  footer: {
+    paddingHorizontal: SPACING.screenPadding,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  footerHint: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   saveButtonInner: {
     flexDirection: 'row',
     alignItems: 'center',

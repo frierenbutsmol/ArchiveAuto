@@ -9,7 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const M = require('./models');
 const { buildSystemInstruction, askGemini } = require('./ai');
-const { sendResetEmail, resetLinks } = require('./mailer');
+const { sendResetEmail, sendVerifyEmail, resetLinks } = require('./mailer');
 const { makeAuth } = require('./rbac');
 const { registerRoleRoutes } = require('./roleRoutes');
 const { applySecurity } = require('./security');
@@ -63,16 +63,37 @@ function blockRoleEscalation(req, res, next) {
   next();
 }
 
+// Creates a fresh 24-hour verification token and emails the link. Returns false if the email
+// could not be sent (the account still exists; the user can ask for another email).
+async function sendVerification(user) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await M.VerifyToken.deleteMany({ user_id: user._id });
+  await M.VerifyToken.create({ user_id: user._id, token_hash: sha(token), expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+  try { await sendVerifyEmail(user.email, token); return true; }
+  catch (e) { console.error('Verification email failed:', e.message); return false; }
+}
+
 app.post('/auth/register', blockRoleEscalation, validate(schemas.register), wrap(async (req, res) => {
   const { email, password, display_name } = req.body;
   const role = req.body.role || 'user';   // already checked: only 'user' or 'mechanic' get here
-  if (await M.User.findOne({ email }))
+  const existing = await M.User.findOne({ email });
+  if (existing && existing.email_verified !== false)
     return res.status(409).json({ error: 'Email already registered.' });
-  const user = await M.User.create({
-    email, display_name, role, password_hash: await bcrypt.hash(password, 10),
-  });
-  audit(req, 'register', { user_id: user._id, target_type: 'user', target_id: user._id, detail: { role } });
-  res.status(201).json({ token: sign(user), user: publicUser(user) });
+
+  // No login token is issued here. The account stays locked until the email link is opened.
+  // If the email was already signed up but never verified, the new details replace the old
+  // ones (only the real owner of the mailbox can ever verify it).
+  const password_hash = await bcrypt.hash(password, 10);
+  let user = existing;
+  if (user) {
+    user.set({ password_hash, display_name, role });
+    await user.save();
+  } else {
+    user = await M.User.create({ email, display_name, role, password_hash, email_verified: false });
+    audit(req, 'register', { user_id: user._id, target_type: 'user', target_id: user._id, detail: { role } });
+  }
+  const sent = await sendVerification(user);
+  res.status(201).json({ needs_verification: true, email: user.email, email_sent: sent });
 }));
 
 app.post('/auth/login', validate(schemas.login), wrap(async (req, res) => {
@@ -83,8 +104,44 @@ app.post('/auth/login', validate(schemas.login), wrap(async (req, res) => {
     audit(req, 'login_failed', { detail: { email } });
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
+  if (user.email_verified === false) {   // old accounts have no value here and are fine
+    audit(req, 'login_blocked_unverified', { user_id: user._id });
+    return res.status(403).json({
+      error: 'Please verify your email first. Check your inbox for the verification link.',
+      code: 'email_not_verified',
+    });
+  }
   audit(req, 'login_success', { user_id: user._id });
   res.json({ token: sign(user), user: publicUser(user) });
+}));
+
+// Page opened from the verification email. Marks the account as verified.
+const verifyPage = (ok, message) => `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>ArchiveAuto</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:48px 20px">
+<h2>${ok ? 'Email verified' : 'Verification failed'}</h2>
+<p>${message}</p></body></html>`;
+
+app.get('/verify-email', wrap(async (req, res) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  if (!/^[a-f0-9]{64}$/.test(token))
+    return res.status(400).type('html').send(verifyPage(false, 'This verification link is not valid.'));
+  const rec = await M.VerifyToken.findOne({ token_hash: sha(token), expires_at: { $gt: new Date() } });
+  if (!rec) {
+    audit(req, 'email_verify_failed');
+    return res.status(400).type('html').send(verifyPage(false, 'This link is invalid or has expired. Go back to the app, try to log in, and ask for a new verification email.'));
+  }
+  await M.User.findByIdAndUpdate(rec.user_id, { email_verified: true });
+  await M.VerifyToken.deleteMany({ user_id: rec.user_id });
+  audit(req, 'email_verified', { user_id: rec.user_id });
+  res.type('html').send(verifyPage(true, 'Your account is ready. Go back to the ArchiveAuto app and log in.'));
+}));
+
+// Sends another verification email. Always answers 200 so nobody can probe which emails exist.
+app.post('/auth/resend-verification', validate(schemas.forgot), wrap(async (req, res) => {
+  const user = await M.User.findOne({ email: req.body.email });
+  if (user && user.email_verified === false) await sendVerification(user);
+  res.json({ ok: true });
 }));
 
 // Forgot password: always answers 200 so nobody can probe which emails exist.
@@ -123,15 +180,26 @@ app.post('/auth/reset', validate(schemas.reset), wrap(async (req, res) => {
     audit(req, 'password_reset_failed');
     return res.status(400).json({ error: 'Reset link is invalid or has expired.' });
   }
-  await M.User.findByIdAndUpdate(rec.user_id, { password_hash: await bcrypt.hash(password, 10) });
+  await M.User.findByIdAndUpdate(rec.user_id, { password_hash: await bcrypt.hash(password, 10), email_verified: true });
   await rec.deleteOne();
   audit(req, 'password_reset_completed', { user_id: rec.user_id });
   res.json({ ok: true });
 }));
 
 // Change password while logged in (replaces supabase.auth.updateUser)
+// The current password is required, so someone holding an unlocked phone can't change it.
+// A wrong current password answers 400 (not 401), because 401 would sign the user out in the app.
 app.put('/auth/password', auth, validate(schemas.password), wrap(async (req, res) => {
-  await M.User.findByIdAndUpdate(req.userId, { password_hash: await bcrypt.hash(req.body.password, 10) });
+  const { current_password, password } = req.body;
+  const user = await M.User.findById(req.userId);
+  const matches = user?.password_hash ? await bcrypt.compare(current_password, user.password_hash) : false;
+  if (!matches) {
+    audit(req, 'password_change_failed');
+    return res.status(400).json({ error: 'Your current password is incorrect.' });
+  }
+  if (current_password === password)
+    return res.status(400).json({ error: 'Your new password must be different from your current one.' });
+  await M.User.findByIdAndUpdate(req.userId, { password_hash: await bcrypt.hash(password, 10) });
   audit(req, 'password_changed');
   res.json({ ok: true });
 }));
