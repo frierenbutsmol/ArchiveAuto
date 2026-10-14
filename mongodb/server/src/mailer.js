@@ -1,9 +1,14 @@
-// Sends emails through Resend's HTTPS API (no extra package needed).
+// Sends emails over HTTPS (no extra package needed).
 //   sendResetEmail(to, token)    password reset (link valid 1 hour)
 //   sendVerifyEmail(to, token)   sign-up verification (link valid 24 hours)
-// Required env: RESEND_API_KEY, MAIL_FROM   Optional: PUBLIC_URL, APP_SCHEME
-// Note: with Resend's test sender you can only email your own address. To email real users,
-// verify a domain in Resend and use an address on it as MAIL_FROM.
+//
+// Two providers are supported. Brevo is used when BREVO_API_KEY is set, otherwise Resend.
+//   Brevo  (free: 300 emails/day, any recipient, one verified sender address, no domain needed)
+//          env: BREVO_API_KEY, MAIL_FROM = the sender address verified in Brevo
+//               MAIL_FROM_NAME (optional, default "ArchiveAuto")
+//   Resend (free test sender only reaches the Resend account owner; real users need a verified domain)
+//          env: RESEND_API_KEY, MAIL_FROM
+// Optional for both: PUBLIC_URL, APP_SCHEME
 const APP_SCHEME = process.env.APP_SCHEME || 'archiveauto';
 
 function resetLinks(token) {
@@ -21,14 +26,44 @@ function verifyLink(token) {
   return `${base}/verify-email?token=${encodeURIComponent(token)}`;
 }
 
-async function send({ to, subject, text, html, devNote }) {
-  if (!process.env.RESEND_API_KEY || !process.env.MAIL_FROM) {
-    if (process.env.NODE_ENV === 'production')
-      throw new Error('RESEND_API_KEY and MAIL_FROM must be set in production.');
-    console.log(`[DEV] ${devNote}`);   // local development only
-    return;
-  }
+// "Name <me@example.com>" or just "me@example.com" -> { name, email }
+function parseFrom(from) {
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from || '');
+  if (m) return { name: m[1].replace(/^"|"$/g, '') || 'ArchiveAuto', email: m[2].trim() };
+  return { name: process.env.MAIL_FROM_NAME || 'ArchiveAuto', email: String(from || '').trim() };
+}
 
+const timeout = () => (typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined);
+
+// Which provider is configured: 'brevo', 'resend' or null.
+function provider() {
+  if (!process.env.MAIL_FROM) return null;
+  if (process.env.BREVO_API_KEY) return 'brevo';
+  if (process.env.RESEND_API_KEY) return 'resend';
+  return null;
+}
+
+async function sendViaBrevo({ to, subject, text, html }) {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: parseFrom(process.env.MAIL_FROM),
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
+    signal: timeout(),
+  });
+  if (!res.ok) throw new Error(`Brevo failed (${res.status}): ${await res.text()}`);
+}
+
+async function sendViaResend({ to, subject, text, html }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -36,8 +71,21 @@ async function send({ to, subject, text, html, devNote }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, text, html }),
+    signal: timeout(),
   });
   if (!res.ok) throw new Error(`Resend failed (${res.status}): ${await res.text()}`);
+}
+
+async function send({ to, subject, text, html, devNote }) {
+  const which = provider();
+  if (!which) {
+    if (process.env.NODE_ENV === 'production')
+      throw new Error('Email is not configured: set BREVO_API_KEY (or RESEND_API_KEY) and MAIL_FROM.');
+    console.log(`[DEV] ${devNote}`);   // local development only
+    return;
+  }
+  if (which === 'brevo') return sendViaBrevo({ to, subject, text, html });
+  return sendViaResend({ to, subject, text, html });
 }
 
 async function sendResetEmail(to, token) {
@@ -70,4 +118,4 @@ async function sendVerifyEmail(to, token) {
   });
 }
 
-module.exports = { sendResetEmail, sendVerifyEmail, resetLinks, verifyLink };
+module.exports = { sendResetEmail, sendVerifyEmail, resetLinks, verifyLink, parseFrom };
