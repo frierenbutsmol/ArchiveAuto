@@ -8,6 +8,7 @@ import {
   StyleSheet,
   StatusBar,
   FlatList,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Animated,
@@ -304,7 +305,12 @@ export default function AIChat() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {messages.length === 0 ? (
-          <View style={styles.emptyState}>
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.emptyState}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.avatarRing}>
               <MaterialIcons name="smart-toy" size={36} color={COLORS.primary} />
             </View>
@@ -328,7 +334,7 @@ export default function AIChat() {
                 </Touchable>
               ))}
             </View>
-          </View>
+          </ScrollView>
         ) : (
           <FlatList
             ref={listRef}
@@ -447,11 +453,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+  // Content is centered when there is room and scrolls when there is not (small phones,
+  // large font sizes, keyboard open), instead of overflowing onto the header and composer.
   emptyState: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: SPACING.xxxl,
+    paddingVertical: SPACING.xl,
   },
   avatarRing: {
     width: 80,

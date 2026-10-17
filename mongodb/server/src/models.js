@@ -61,6 +61,8 @@ const maintenanceSchema = new Schema({
   cost_items: [{ _id: false, name: String, amount: Number }],   // parts / other line items
   shop_name: String,
   parts_replaced: String,
+  proof_file_path: String,        // id of the uploaded receipt/invoice (see StoredFile)
+  proof_file_name: String,
   notes: String,
   added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
   added_by_name: String,

@@ -189,6 +189,8 @@ export default function MaintenanceList({ navigation }) {
           notes:
             item.notes || '',
 
+          proofFileId: item.proof_file_path || null,
+
           rawCost:
             item.cost !== null &&
             item.cost !== undefined
@@ -658,6 +660,23 @@ export default function MaintenanceList({ navigation }) {
 
                   </View>
 
+                ) : null}
+
+
+                {/* RECEIPT */}
+
+                {item.proofFileId ? (
+                  <TouchableOpacity
+                    style={styles.receiptRow}
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      const { error } = await api.files.open(item.proofFileId);
+                      if (error) Alert.alert('Unable to Open', error.message);
+                    }}
+                  >
+                    <Ionicons name="image-outline" size={14} color={COLORS.success} />
+                    <Text style={styles.receiptText}>Receipt attached · Tap to view</Text>
+                  </TouchableOpacity>
                 ) : null}
 
               </View>
@@ -1240,6 +1259,23 @@ const styles = StyleSheet.create({
       COLORS.borderLight,
   },
 
+
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: SPACING.sm,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: RADII.sm,
+    backgroundColor: 'rgba(46, 213, 115, 0.12)',
+  },
+  receiptText: {
+    color: COLORS.success,
+    fontSize: 11,
+    fontWeight: '600',
+  },
 
   notesText: {
     flex: 1,

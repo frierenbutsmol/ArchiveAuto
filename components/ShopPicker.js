@@ -20,9 +20,11 @@ const NONE = '__none__';
 // Dropdown of the mechanics registered in the app.
 // - "No shop / did it myself" clears the field.
 // - "Other shop (type name)" reveals a text box for shops that aren't in the app.
-// - If no mechanics are registered (or the list can't load) it falls back to a plain text box,
-//   so the field never becomes unusable.
-export default function ShopPicker({ value, onChange }) {
+// - The dropdown always has those two options, so it stays usable even when no mechanics are
+//   registered yet or the list can't load.
+// `none` / `onNone` carry the explicit "no shop / did it myself" choice, so the form can tell
+// "chose DIY" apart from "has not chosen yet".
+export default function ShopPicker({ value, onChange, none, onNone }) {
   const [mechanics, setMechanics] = useState(null);   // null = still loading
   const [open, setOpen] = useState(false);
   const [typing, setTyping] = useState(false);        // "Other" chosen
@@ -39,17 +41,6 @@ export default function ShopPicker({ value, onChange }) {
   const names = (mechanics || []).map((m) => m.display_name);
   const isRegistered = !!value && names.includes(value);
 
-  // No registered mechanics: plain text box.
-  if (mechanics && mechanics.length === 0) {
-    return (
-      <BoxInput
-        placeholder="Shop name (optional)"
-        value={value}
-        onChangeText={onChange}
-      />
-    );
-  }
-
   const options = [
     { key: NONE, label: 'No shop / did it myself' },
     ...(mechanics || []).map((m) => ({ key: m.id, label: m.display_name })),
@@ -58,19 +49,19 @@ export default function ShopPicker({ value, onChange }) {
 
   const pick = (opt) => {
     setOpen(false);
-    if (opt.key === NONE) { setTyping(false); onChange(''); }
-    else if (opt.key === OTHER) { setTyping(true); onChange(isRegistered ? '' : value); }
-    else { setTyping(false); onChange(opt.label); }
+    if (opt.key === NONE) { setTyping(false); onChange(''); onNone?.(true); }
+    else if (opt.key === OTHER) { setTyping(true); onChange(isRegistered ? '' : value); onNone?.(false); }
+    else { setTyping(false); onChange(opt.label); onNone?.(false); }
   };
 
   const showTextBox = typing && !isRegistered;
-  const display = showTextBox ? 'Other shop' : value || '';
+  const display = none ? 'No shop / did it myself' : showTextBox ? 'Other shop' : value || '';
 
   return (
     <View>
       <TouchableOpacity style={styles.select} activeOpacity={0.8} onPress={() => setOpen(true)}>
         <Text style={[styles.selectText, !display && styles.placeholder]} numberOfLines={1}>
-          {mechanics === null ? 'Loading mechanics…' : display || 'Select a mechanic'}
+          {mechanics === null ? 'Loading mechanics…' : display || 'Select a provider'}
         </Text>
         <MaterialIcons name="arrow-drop-down" size={26} color={COLORS.textMuted} />
       </TouchableOpacity>
@@ -94,7 +85,7 @@ export default function ShopPicker({ value, onChange }) {
               keyExtractor={(o) => o.key}
               renderItem={({ item }) => {
                 const selected =
-                  (item.key === NONE && !value && !typing) ||
+                  (item.key === NONE && (none ?? (!value && !typing))) ||
                   (item.key === OTHER && showTextBox) ||
                   (item.key !== NONE && item.key !== OTHER && item.label === value);
                 return (

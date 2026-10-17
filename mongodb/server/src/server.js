@@ -335,12 +335,16 @@ function crud(path, Model, { child = false, schema } = {}) {
     audit(req, 'record_deleted', { target_type: name, target_id: doc._id });
     if (Model === M.Vehicle) {   // deleting a vehicle removes its records and uploaded files too
       const q = { vehicle_id: doc._id };
-      const [docs, reps] = await Promise.all([M.Document.find(q), M.Repair.find(q)]);
-      await deleteStoredFiles(req.userId, [...docs.map((d) => d.file_path), ...reps.map((r) => r.proof_file_path)]);
+      const [docs, reps, maints] = await Promise.all([M.Document.find(q), M.Repair.find(q), M.MaintenanceRecord.find(q)]);
+      await deleteStoredFiles(req.userId, [
+        ...docs.map((d) => d.file_path),
+        ...reps.map((r) => r.proof_file_path),
+        ...maints.map((m) => m.proof_file_path),
+      ]);
       await Promise.all([M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document, M.VehicleShare].map((m) => m.deleteMany(q)));
     }
     if (Model === M.Document) await deleteStoredFiles(req.userId, [doc.file_path]);
-    if (Model === M.Repair) await deleteStoredFiles(req.userId, [doc.proof_file_path]);
+    if (Model === M.Repair || Model === M.MaintenanceRecord) await deleteStoredFiles(req.userId, [doc.proof_file_path]);
     res.json({ deleted: true });
   }));
 

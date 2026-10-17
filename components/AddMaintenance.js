@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
 import ShopPicker from './ShopPicker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney } from './FormKit';
 
 // Fixed height of the app bar itself (status bar space is added via marginTop).
@@ -32,6 +33,14 @@ const SERVICE_TYPES = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery', 'Ot
 // Alerts screen work out when each one is next due, so it is asked for as soon as
 // one of these is ticked. "Other" has no interval, so it doesn't need it.
 const NEEDS_MILEAGE = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery'];
+
+// Receipt / invoice attachments (same limits as the server and the repair form).
+const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
+const PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const mimeFromName = (name = '') => {
+  const ext = name.split('.').pop().toLowerCase();
+  return ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
+};
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
@@ -110,11 +119,51 @@ export default function AddMaintenance() {
   const totalCost =
     Math.round((toNumber(laborCost) + partItems.reduce((t, it) => t + toNumber(it.amount), 0)) * 100) / 100;
   const [shopName, setShopName] = useState('');
+  const [diy, setDiy] = useState(false);   // chose "No shop / did it myself"
+  const [proofFile, setProofFile] = useState(null);   // optional receipt / invoice
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   const needsMileage = serviceTypes.some((t) => NEEDS_MILEAGE.includes(t));
-  const canSave = serviceTypes.length > 0 && (!needsMileage || mileage.trim() !== '');
+  // The provider is required: pick a registered mechanic, type another shop, or choose DIY.
+  const hasProvider = diy || shopName.trim() !== '';
+  // A receipt can only be attached to shop / mechanic work, not when you did it yourself.
+  const canAttach = !diy && shopName.trim() !== '';
+  useEffect(() => { if (diy) setProofFile(null); }, [diy]);
+
+  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  const pickProof = async () => {
+    if (!canAttach) return;
+    if (proofFile) {
+      setProofFile(null);
+      return;
+    }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: PROOF_TYPES,
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file) return;
+
+      const mime = PROOF_TYPES.includes(file.mimeType) ? file.mimeType : mimeFromName(file.name);
+      if (!mime) {
+        Alert.alert('Unsupported File', 'Please choose a JPG, PNG or PDF.');
+        return;
+      }
+      if (file.size && file.size > MAX_PROOF_BYTES) {
+        Alert.alert('File Too Large', 'Please choose a file under 8 MB.');
+        return;
+      }
+      setProofFile({ ...file, mime });
+    } catch {
+      Alert.alert('File Selection Failed', 'Could not select the file.');
+    }
+  };
+
+  const canSave = serviceTypes.length > 0 && hasProvider && (!needsMileage || mileage.trim() !== '');
 
   const handleCancel = () => {
     if (navigation.canGoBack()) {
@@ -155,6 +204,16 @@ export default function AddMaintenance() {
         return;
       }
 
+      let proofId = null;
+      if (canAttach && proofFile) {
+        const upload = await api.files.upload(proofFile.uri, { mime: proofFile.mime, name: proofFile.name });
+        if (upload.error) {
+          Alert.alert('Upload Failed', upload.error.message);
+          return;
+        }
+        proofId = upload.data.id;
+      }
+
       const { data, error } = await api.create('maintenance_records', {
           vehicle_id: vehicle.id,
           maintenance_type: serviceTypes.join(', '),   // e.g. "Oil Change, Brakes"
@@ -163,11 +222,13 @@ export default function AddMaintenance() {
           cost: totalCost > 0 ? totalCost : null,   // the server recomputes this from the parts below
           ...(laborValue > 0 ? { labor_cost: laborValue } : {}),
           ...(items.length ? { cost_items: items } : {}),
-          shop_name: shopName.trim() || null,
+          shop_name: diy ? null : (shopName.trim() || null),
+          ...(proofId ? { proof_file_path: proofId, proof_file_name: proofFile?.name || null } : {}),
           notes: notes.trim() || null,
       });
 
       if (error) {
+        if (proofId) await api.files.remove(proofId);   // don't leave an orphan upload behind
         console.error('Maintenance save error:', error);
         Alert.alert('Save Failed', error.message || 'Could not save the maintenance record.');
         return;
@@ -320,8 +381,49 @@ export default function AddMaintenance() {
             </Field>
 
             {/* Shop / Provider */}
-            <Field label="Service Provider (optional)">
-              <ShopPicker value={shopName} onChange={setShopName} />
+            <Field label="Service Provider" required>
+              <ShopPicker value={shopName} onChange={setShopName} none={diy} onNone={setDiy} />
+            </Field>
+
+            {/* Receipt / invoice: only for shop or mechanic work */}
+            <Field label="Receipt or Invoice (optional)">
+              <TouchableOpacity
+                style={[
+                  styles.uploadBox,
+                  proofFile && styles.uploadBoxAttached,
+                  !canAttach && styles.uploadBoxDisabled,
+                ]}
+                onPress={pickProof}
+                disabled={!canAttach}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons
+                  name={proofFile ? 'check-circle' : 'photo-camera'}
+                  size={30}
+                  color={proofFile ? COLORS.success : canAttach ? COLORS.primary : COLORS.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.uploadTitle,
+                    proofFile && { color: COLORS.success },
+                    !canAttach && { color: COLORS.textMuted },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {diy
+                    ? 'No receipt needed when you did it yourself'
+                    : !canAttach
+                    ? 'Choose a service provider first'
+                    : proofFile
+                    ? proofFile.name || 'Receipt attached'
+                    : 'Tap to attach a receipt photo or PDF'}
+                </Text>
+                <Text style={styles.uploadHint}>
+                  {proofFile
+                    ? 'Tap again to remove attachment'
+                    : 'Keeps your paperwork with the record (JPG, PNG or PDF, up to 8 MB)'}
+                </Text>
+              </TouchableOpacity>
             </Field>
 
             {/* Notes */}
@@ -515,6 +617,39 @@ const styles = StyleSheet.create({
   },
   checkLabelActive: {
     color: COLORS.primary,
+  },
+  uploadBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(55, 194, 223, 0.4)',
+    borderRadius: RADII.card,
+    backgroundColor: COLORS.surface,
+    paddingVertical: 22,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadBoxAttached: {
+    borderColor: COLORS.success,
+    borderStyle: 'solid',
+    backgroundColor: 'rgba(46, 213, 115, 0.08)',
+  },
+  uploadBoxDisabled: {
+    opacity: 0.4,
+    borderColor: COLORS.border,
+  },
+  uploadTitle: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  uploadHint: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+    textAlign: 'center',
   },
   checkError: {
     color: COLORS.danger,

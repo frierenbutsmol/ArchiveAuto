@@ -18,7 +18,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
-import MechanicSuggestions from './MechanicSuggestions';
+import MechanicPicker from './MechanicPicker';
 import * as DocumentPicker from 'expo-document-picker';
 
 const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -53,7 +53,9 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
             borderless
           )}
         >
-          <View style={[{ flex: 1 }, innerLayout]}>{children}</View>
+          {/* flexGrow (not flex: 1): flex: 1 has a zero basis and collapses to 0 height
+              inside an auto-height parent such as the pinned footer, hiding the button. */}
+          <View style={[{ flexGrow: 1 }, innerLayout]}>{children}</View>
         </TouchableNativeFeedback>
       </View>
     );
@@ -167,7 +169,7 @@ export default function AddRepair({ navigation, route }) {
       }
 
       let proofId = null;
-      if (proofFile) {
+      if (requiresProof && proofFile) {
         const upload = await api.files.upload(proofFile.uri, { mime: proofFile.mime, name: proofFile.name });
         if (upload.error) {
           Alert.alert('Upload Failed', upload.error.message);
@@ -183,9 +185,9 @@ export default function AddRepair({ navigation, route }) {
           repair_date:     new Date().toISOString().split('T')[0],
           mileage:         displayToKm(mileageValue, useMetric),
           cost:            Number.isNaN(costValue) ? null : costValue,
-          shop_name:       shopName.trim() || null,
+          shop_name:       repairType === 'DIY' ? null : (shopName.trim() || null),
           proof_file_path: proofId,
-          proof_file_name: proofFile?.name || null,
+          proof_file_name: requiresProof ? (proofFile?.name || null) : null,
           notes:           notes.trim() || null,
       });
 
@@ -246,7 +248,10 @@ export default function AddRepair({ navigation, route }) {
                   <TouchableOpacity
                     key={type.id}
                     style={[styles.typeTile, selected && styles.typeTileSelected]}
-                    onPress={() => setRepairType(type.id)}
+                    onPress={() => {
+                      setRepairType(type.id);
+                      if (!type.requiresProof) setProofFile(null);   // no receipt for DIY / Informal
+                    }}
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.typeTileText, selected && styles.typeTileTextSelected]}>
@@ -284,22 +289,13 @@ export default function AddRepair({ navigation, route }) {
             />
           </View>
 
-          {/* Shop / Provider */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>Repair Shop / Mechanic Name</Text>
-            <TextInput
-              style={[styles.input, focusedField === 'shop' && styles.inputFocused]}
-              placeholder="e.g. Toyota Dealership Service, Rapid Auto"
-              placeholderTextColor={COLORS.textMuted}
-              value={shopName}
-              onChangeText={setShopName}
-              onFocus={() => setFocusedField('shop')}
-              onBlur={() => setFocusedField(null)}
-              selectionColor={COLORS.primary}
-              underlineColorAndroid="transparent"
-            />
-            <MechanicSuggestions value={shopName} onSelect={setShopName} />
-          </View>
+          {/* Shop / Provider (not needed for DIY) */}
+          {repairType !== 'DIY' && (
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Repair Shop / Mechanic Name</Text>
+              <MechanicPicker value={shopName} onChange={setShopName} />
+            </View>
+          )}
 
           {/* Odometer & Cost */}
           <View style={styles.row}>
@@ -358,23 +354,35 @@ export default function AddRepair({ navigation, route }) {
                 styles.uploadBox,
                 hasPhoto && styles.uploadBoxAttached,
                 requiresProof && !hasPhoto && styles.uploadBoxRequired,
+                !requiresProof && styles.uploadBoxDisabled,
               ]}
               onPress={pickProof}
+              disabled={!requiresProof}
               rippleColor="rgba(255,255,255,0.06)"
             >
               <View style={styles.uploadBoxInner}>
                 <Ionicons
                   name={hasPhoto ? 'checkmark-circle' : 'camera-outline'}
                   size={32}
-                  color={hasPhoto ? COLORS.success : COLORS.primary}
+                  color={hasPhoto ? COLORS.success : requiresProof ? COLORS.primary : COLORS.textMuted}
                 />
-                <Text style={[styles.uploadTitle, hasPhoto && { color: COLORS.success }]}>
-                  {hasPhoto
+                <Text
+                  style={[
+                    styles.uploadTitle,
+                    hasPhoto && { color: COLORS.success },
+                    !requiresProof && { color: COLORS.textMuted },
+                  ]}
+                >
+                  {!requiresProof
+                    ? 'No receipt needed for this repair type'
+                    : hasPhoto
                     ? proofFile.name || 'Receipt Attached'
                     : 'Tap to Attach Receipt Photo or PDF'}
                 </Text>
                 <Text style={styles.uploadHint}>
-                  {hasPhoto
+                  {!requiresProof
+                    ? 'Choose Official Shop or Manufacturer/Dealer to attach one'
+                    : hasPhoto
                     ? 'Tap again to remove attachment'
                     : 'Proves repairs for warranty & resale value'}
                 </Text>
@@ -555,15 +563,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   proofHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: SPACING.sm,
   },
   proofNotice: {
     color: COLORS.primary,
     fontSize: 11,
     fontWeight: '600',
+    marginTop: -4,
   },
   uploadBox: {
     borderWidth: 1.5,
@@ -572,6 +578,9 @@ const styles = StyleSheet.create({
     borderRadius: RADII.card,
     backgroundColor: COLORS.surface,
     overflow: 'hidden',
+  },
+  uploadBoxDisabled: {
+    opacity: 0.4,
   },
   uploadBoxRequired: {
     borderColor: 'rgba(55, 194, 223, 0.4)',

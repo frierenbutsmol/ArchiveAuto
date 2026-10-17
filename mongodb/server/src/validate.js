@@ -172,6 +172,8 @@ const schemas = {
     cost_items: costItems(),
     shop_name: text({ max: 100 }),
     parts_replaced: text({ max: 300 }),
+    proof_file_path: text({ max: 300 }),
+    proof_file_name: text({ max: 200 }),
     notes: text({ max: 2000 }),
   },
   repair: {
