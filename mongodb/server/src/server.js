@@ -376,6 +376,8 @@ function aiRateLimited(userId) {
 
 app.post('/ai-chat', auth, wrap(async (req, res) => {
   const { message, mode, vehicle_id } = req.body;
+  // Earlier turns of this conversation, so follow-up questions make sense. ai.js cleans and limits them.
+  const history = Array.isArray(req.body.history) ? req.body.history.slice(-20) : [];
   if (typeof message !== 'string' || !message.trim())
     return res.status(400).json({ error: 'Message is required.' });
   if (message.length > 2000)
@@ -403,7 +405,7 @@ app.post('/ai-chat', auth, wrap(async (req, res) => {
   }
 
   try {
-    const reply = await askGemini(buildSystemInstruction(ctx), message.trim());
+    const reply = await askGemini(buildSystemInstruction(ctx), message.trim(), history);
     res.json({ reply });
   } catch (e) {
     console.error('AI chat failed:', e.message);

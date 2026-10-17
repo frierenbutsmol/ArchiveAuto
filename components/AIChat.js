@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,41 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
+
+// How many earlier messages are sent along so follow-up questions make sense.
+const HISTORY_TURNS = 10;
+
+// Example questions on the empty screen (tap to send).
+const STARTERS = {
+  vehicle: [
+    'What maintenance is due?',
+    'When was my last oil change?',
+    'How much have I spent on repairs?',
+    'Do any of my documents expire soon?',
+  ],
+  general: [
+    'How often should I change engine oil?',
+    'How can I improve my fuel economy?',
+    'What does a check engine light mean?',
+    'How do I check my tire pressure?',
+  ],
+};
+
+// The earlier turns of THIS conversation: same mode and, in vehicle mode, the same vehicle.
+// Error and "no vehicle" notices are not part of the conversation.
+const buildHistory = (list, mode, vehicleId) =>
+  list
+    .filter((m) => !m.isError && m.mode === mode && (m.vehicleId ?? null) === (vehicleId ?? null))
+    .slice(-HISTORY_TURNS)
+    .map((m) => ({ role: m.role, text: m.text }));
+
+const vehicleName = (v) =>
+  [v.year, v.make, v.series].filter(Boolean).join(' ') || v.nickname || 'your vehicle';
 
 // Real Material ripple on Android; opacity dimming on iOS.
 // Caller's style is applied directly to the touchable's child so the
@@ -60,6 +91,7 @@ export default function AIChat() {
   const [chatMode, setChatMode] = useState('vehicle'); // 'vehicle' | 'general'
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
+  const [activeVehicle, setActiveVehicle] = useState(undefined); // undefined = loading, null = none added
   const [isLoading, setIsLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const listRef = useRef(null);
@@ -114,13 +146,28 @@ export default function AIChat() {
     return sorted[0];
   };
 
+  // Show which vehicle the assistant is answering about, and refresh it when the user comes back
+  // to this tab (the vehicle can be changed from Home or Garage).
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      getSelectedVehicle()
+        .then((v) => { if (alive) setActiveVehicle(v); })
+        .catch(() => {});
+      return () => { alive = false; };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
+
   const handleSendText = async (textToSend) => {
     const query = (textToSend || message).trim();
     if (!query || isLoading) return;
 
+    const prior = messages;   // everything said before this question
+    const userMsgId = `${Date.now()}-user`;
     setMessages((prev) => [
       ...prev,
-      { id: `${Date.now()}-user`, role: 'user', text: query, mode: chatMode },
+      { id: userMsgId, role: 'user', text: query, mode: chatMode },
     ]);
 
     if (!textToSend) setMessage('');
@@ -139,6 +186,7 @@ export default function AIChat() {
             {
               id: `${Date.now()}-no-vehicle`,
               role: 'assistant',
+              isError: true,
               text: 'You do not have a vehicle added yet. Add a vehicle first so I can answer questions using your vehicle information.',
             },
           ]);
@@ -146,12 +194,16 @@ export default function AIChat() {
         }
 
         vehicleId = vehicle.id;
+        setActiveVehicle(vehicle);
+        // remember which vehicle this question was about
+        setMessages((prev) => prev.map((m) => (m.id === userMsgId ? { ...m, vehicleId } : m)));
       }
 
       const { data, error } = await api.chat({
         message: query,
         mode: chatMode,
         vehicleId,
+        history: buildHistory(prior, chatMode, vehicleId),
       });
 
       if (error) {
@@ -165,7 +217,7 @@ export default function AIChat() {
 
       setMessages((prev) => [
         ...prev,
-        { id: `${Date.now()}-assistant`, role: 'assistant', text: data.reply },
+        { id: `${Date.now()}-assistant`, role: 'assistant', text: data.reply, mode: chatMode, vehicleId },
       ]);
       scrollToEndSoon();
     } catch (error) {
@@ -176,6 +228,7 @@ export default function AIChat() {
         {
           id: `${Date.now()}-error`,
           role: 'assistant',
+          isError: true,
           text:
             error?.message ||
             'Something went wrong while contacting the AI. Please try again.',
@@ -211,6 +264,14 @@ export default function AIChat() {
   const canSend = message.trim().length > 0 && !isLoading;
   const isVehicleMode = chatMode === 'vehicle';
 
+  // "Answering about: 2018 Toyota Vios" so the user knows which vehicle the answers are for.
+  const vehicleLabel =
+    activeVehicle === undefined
+      ? ''
+      : activeVehicle
+        ? `Answering about: ${vehicleName(activeVehicle)}${activeVehicle.nickname ? ` (\u201c${activeVehicle.nickname}\u201d)` : ''}`
+        : 'No vehicle added yet';
+
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -231,6 +292,12 @@ export default function AIChat() {
         </Touchable>
       </View>
 
+      {isVehicleMode && vehicleLabel ? (
+        <Text style={styles.vehicleLine} numberOfLines={1}>
+          {vehicleLabel}
+        </Text>
+      ) : null}
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior="padding"
@@ -247,6 +314,20 @@ export default function AIChat() {
                 ? 'I can answer using your vehicle’s maintenance, repair, parts, and document records.'
                 : 'I can help with general car care and maintenance questions.'}
             </Text>
+            <View style={styles.starterWrap}>
+              {(isVehicleMode ? STARTERS.vehicle : STARTERS.general).map((q) => (
+                <Touchable
+                  key={q}
+                  style={styles.chip}
+                  onPress={() => handleSendText(q)}
+                  rippleColor="rgba(55, 194, 223, 0.12)"
+                >
+                  <View style={styles.chipInner}>
+                    <Text style={styles.chipText}>{q}</Text>
+                  </View>
+                </Touchable>
+              ))}
+            </View>
           </View>
         ) : (
           <FlatList
@@ -432,6 +513,20 @@ const styles = StyleSheet.create({
   },
   loadingBubble: {
     marginBottom: SPACING.sm,
+  },
+  vehicleLine: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.sm,
+  },
+  starterWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    marginTop: SPACING.xl,
   },
   chipRow: {
     paddingHorizontal: SPACING.xl,
