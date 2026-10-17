@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, StatusBar } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,10 @@ export default function ShareVehicle() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState('');     // shown in red under the input
+  const [selected, setSelected] = useState(null);       // mechanic picked from the dropdown
+  const [suggestions, setSuggestions] = useState([]);
+  const [noMatch, setNoMatch] = useState(false);
   const [loadingList, setLoadingList] = useState(!params.vehicleId);
 
   // Vehicle picker (only needed when no vehicle was passed in).
@@ -45,17 +49,50 @@ export default function ShareVehicle() {
 
   useEffect(() => { setShares(null); loadShares(); }, [loadShares]);
 
+  // Search-as-you-type (name or email) once two characters are typed.
+  useEffect(() => {
+    const q = email.trim();
+    setNoMatch(false);
+    if (selected || q.length < 2) { setSuggestions([]); return undefined; }
+    let alive = true;
+    const t = setTimeout(async () => {
+      const { data } = await api.mechanics.search(q);
+      if (!alive) return;
+      const list = Array.isArray(data) ? data : [];
+      setSuggestions(list);
+      setNoMatch(list.length === 0);
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [email, selected]);
+
+  // Don't offer mechanics this vehicle is already shared with.
+  const options = suggestions.filter((m) => !(shares || []).some((x) => x.mechanic_id === m.id));
+
+  const pickMechanic = (m) => {
+    setSelected(m);
+    setEmail(m.display_name);
+    setSuggestions([]);
+    setFieldError('');
+  };
+
   const current = vehicles.find((v) => v.id === vehicleId);
   const title = params.vehicleName || (current ? vehicleName(current) : 'Share with mechanic');
 
   const share = async () => {
-    const target = email.trim().toLowerCase();
-    if (!target) return Alert.alert('Missing email', "Enter the mechanic's account email.");
+    const typed = email.trim().toLowerCase();
+    if (!selected) {
+      if (!typed) return setFieldError("Enter the mechanic's name or account email.");
+      if (!/^\S+@\S+\.\S+$/.test(typed))
+        return setFieldError('Pick a mechanic from the list, or enter a full email address.');
+    }
     setBusy(true);
-    const { error: err } = await api.shares.add(vehicleId, target);
+    const { error: err } = await api.shares.add(vehicleId, selected ? { mechanicId: selected.id } : { email: typed });
     setBusy(false);
-    if (err) return Alert.alert('Could not share', err.message);
+    if (err) return setFieldError(err.message);
     setEmail('');
+    setSelected(null);
+    setSuggestions([]);
+    setFieldError('');
     loadShares();
   };
 
@@ -106,17 +143,44 @@ export default function ShareVehicle() {
                 A mechanic you share with can view this vehicle's service records and add new ones. You can remove access at any time.
               </Text>
 
-              <Text style={ui.label}>Mechanic's account email</Text>
+              <Text style={ui.label}>Mechanic's name or account email</Text>
               <TextInput
-                style={ui.input}
+                style={[ui.input, !!fieldError && styles.inputError]}
                 value={email}
-                onChangeText={setEmail}
-                placeholder="mechanic@example.com"
+                onChangeText={(t) => { setEmail(t); setSelected(null); setFieldError(''); }}
+                placeholder="Search by name or email"
                 placeholderTextColor={COLORS.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
               />
+              {!!fieldError && <Text style={styles.fieldError}>{fieldError}</Text>}
+
+              {selected && !fieldError ? (
+                <Text style={styles.selectedText}>
+                  {selected.display_name} · {selected.email_hint}
+                </Text>
+              ) : null}
+
+              {options.length > 0 && (
+                <View style={styles.dropdown}>
+                  {options.map((m, i) => (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[styles.option, i > 0 && styles.optionBorder]}
+                      activeOpacity={0.7}
+                      onPress={() => pickMechanic(m)}
+                    >
+                      <Text style={ui.cardTitle} numberOfLines={1}>{m.display_name}</Text>
+                      <Text style={ui.cardMeta} numberOfLines={1}>{m.email_hint}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {noMatch && !selected && email.trim().length >= 2 && (
+                <Text style={styles.noMatch}>No registered mechanic matches that.</Text>
+              )}
+
               <PrimaryButton label="Share vehicle" icon="share-outline" onPress={share} loading={busy} style={{ marginTop: 16 }} />
 
               <Text style={ui.sectionTitle}>Shared with</Text>
@@ -150,3 +214,20 @@ export default function ShareVehicle() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  inputError: { borderColor: COLORS.danger, borderWidth: 1.5 },
+  fieldError: { color: COLORS.danger, fontSize: 13, marginTop: 6 },
+  selectedText: { color: COLORS.primary, fontSize: 13, marginTop: 6 },
+  noMatch: { color: COLORS.textMuted, fontSize: 13, marginTop: 8 },
+  dropdown: {
+    marginTop: 6,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  option: { paddingHorizontal: 16, paddingVertical: 12 },
+  optionBorder: { borderTopWidth: 1, borderTopColor: COLORS.border },
+});

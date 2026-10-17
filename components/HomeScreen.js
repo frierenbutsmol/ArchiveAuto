@@ -852,8 +852,14 @@ export default function HomeScreen({ navigation, route }) {
             Vehicle History Report
           </Text>
 
-          <View
+          <Touchable
             style={styles.historyCard}
+            onPress={() =>
+              navigation.navigate(
+                'VehicleHistory',
+                { vehicle: currentVehicle }
+              )
+            }
           >
             <View
               style={styles.historyIconWrap}
@@ -882,7 +888,13 @@ export default function HomeScreen({ navigation, route }) {
                 for this vehicle.
               </Text>
             </View>
-          </View>
+
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={COLORS.textMuted}
+            />
+          </Touchable>
         </View>
       </ScrollView>
     </SafeAreaView>

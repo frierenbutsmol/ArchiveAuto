@@ -16,6 +16,13 @@ const forMechanic = (doc) => {
   return rest;
 };
 
+// "demo.mechanic@example.com" -> "de***@example.com"
+const maskEmail = (email) => {
+  const [local = '', domain = ''] = String(email || '').split('@');
+  return `${local.slice(0, local.length > 3 ? 2 : 1)}***@${domain}`;
+};
+const escapeRegex = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const adminView = (u) => ({
   id: String(u._id),
   email: u.email || null,
@@ -37,6 +44,25 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
       display_name: { $exists: true, $ne: '' },
     }).select('display_name').sort({ display_name: 1 }).limit(200);
     res.json(rows.map((u) => ({ id: String(u._id), display_name: u.display_name })));
+  }));
+
+  // Search-as-you-type for the Share screen. Matches a name anywhere, or an email from its start.
+  // Emails come back masked (de***@example.com); the app then shares by id, so a full address is
+  // never handed out to someone who didn't already know it.
+  app.get('/mechanics/search', auth, wrap(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+    if (q.length < 2) return res.json([]);
+    const safe = escapeRegex(q);
+    const rows = await M.User.find({
+      role: 'mechanic',
+      email_verified: { $ne: false },
+      $or: [{ display_name: new RegExp(safe, 'i') }, { email: new RegExp(`^${safe}`, 'i') }],
+    }).select('display_name email').sort({ display_name: 1 }).limit(6);
+    res.json(rows.map((u) => ({
+      id: String(u._id),
+      display_name: u.display_name || 'Mechanic',
+      email_hint: maskEmail(u.email),
+    })));
   }));
 
   // ---------- Owner: share a vehicle with a mechanic ----------
@@ -68,9 +94,13 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
 
     // typeof check: stops objects like {"$ne": null} from reaching the query
     const email = typeof req.body.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-    if (!email) return res.status(400).json({ error: 'Mechanic email is required.' });
+    const mechanicId = typeof req.body.mechanic_id === 'string' ? req.body.mechanic_id : '';
+    if (!email && !mechanicId) return res.status(400).json({ error: "Enter the mechanic's name or account email." });
 
-    const mechanic = await M.User.findOne({ email });
+    // Either a mechanic picked from the search list (by id) or a typed email.
+    const mechanic = mechanicId
+      ? (isId(mechanicId) ? await M.User.findById(mechanicId) : null)
+      : await M.User.findOne({ email });
     if (!mechanic || mechanic.role !== 'mechanic')
       return res.status(404).json({ error: 'No mechanic account found with that email.' });
 

@@ -29,6 +29,7 @@ import MechanicVehicleDetail from './components/role/MechanicVehicleDetail';
 import MechanicAddRecord from './components/role/MechanicAddRecord';
 import AdminTabs from './components/role/AdminTabs';
 import ShareVehicle from './components/role/ShareVehicle';
+import VehicleHistory from './components/VehicleHistory';
 import { routeForRole } from './lib/roles';
 
 const Stack = createNativeStackNavigator();
@@ -152,6 +153,11 @@ export default function App() {
         <Stack.Screen
           name="ShareVehicle"
           component={ShareVehicle}
+        />
+
+        <Stack.Screen
+          name="VehicleHistory"
+          component={VehicleHistory}
         />
 
         <Stack.Screen

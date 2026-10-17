@@ -328,16 +328,9 @@ export default function MaintenanceList({ navigation }) {
         </View>
 
 
-        <Touchable
-          onPress={handleAddMaintenance}
-          style={styles.iconButton}
-        >
-          <MaterialIcons
-            name="add"
-            size={24}
-            color={COLORS.primary}
-          />
-        </Touchable>
+        {/* Empty box the size of the back button, so the title stays centered.
+            Adding a record is done by the big button (empty list) or the floating button. */}
+        <View style={styles.appBarSpacer} />
 
       </View>
 
@@ -412,31 +405,6 @@ export default function MaintenanceList({ navigation }) {
 
           </View>
 
-
-          <View style={styles.summaryDivider} />
-
-
-          {/* Next Due */}
-
-          <View style={styles.summaryItem}>
-
-            <View style={styles.summaryIcon}>
-              <MaterialIcons
-                name="event"
-                size={18}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <Text style={styles.summaryNumber}>
-              —
-            </Text>
-
-            <Text style={styles.summaryLabel}>
-              Next Due
-            </Text>
-
-          </View>
 
         </View>
 
@@ -754,6 +722,11 @@ const styles = StyleSheet.create({
       COLORS.borderLight,
   },
 
+
+  appBarSpacer: {
+    width: 40,
+    height: 40,
+  },
 
   iconButton: {
     width: 40,
