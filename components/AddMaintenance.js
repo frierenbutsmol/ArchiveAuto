@@ -19,6 +19,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import { parseDateInput } from '../lib/dateParse';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
 import ShopPicker from './ShopPicker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -75,12 +76,13 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
 
 const MAX_COST_ITEMS = 20;
 
-const todayISO = () => new Date().toISOString().split('T')[0];
-
-const isValidDate = (value) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().split('T')[0] === value;
+// Today's date on the phone's own calendar, as YYYY-MM-DD.
+// (new Date().toISOString() gives the UTC date, which is a day behind in the Philippines
+// until 8:00 AM, and made every date look invalid.)
+const todayISO = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
 export default function AddMaintenance() {
@@ -192,9 +194,15 @@ export default function AddMaintenance() {
       .map((it) => ({ name: it.name.trim() || 'Item', amount: toNumber(it.amount) }))
       .filter((it) => it.amount > 0);
 
-    const serviceDate = date.trim() || todayISO();
-    if (!isValidDate(serviceDate)) {
-      Alert.alert('Invalid Date', 'Please enter the date as YYYY-MM-DD.');
+    // Read the date ourselves (lib/dateParse.js) and keep it within this year or earlier.
+    const serviceDate = parseDateInput(date.trim() || todayISO());
+    if (!serviceDate) {
+      Alert.alert('Invalid Date', 'Please enter a real date, like 2026-10-18.');
+      return;
+    }
+    const thisYear = new Date().getFullYear();
+    if (Number(serviceDate.slice(0, 4)) > thisYear) {
+      Alert.alert('Date Not Allowed', `Please choose a date in ${thisYear} or earlier.`);
       return;
     }
 

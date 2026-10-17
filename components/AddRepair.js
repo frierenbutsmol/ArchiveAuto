@@ -19,7 +19,9 @@ import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
+import { formatInteger, formatMoney } from '../lib/numberFormat';
 import MechanicPicker from './MechanicPicker';
+import ConfirmCard from './ConfirmCard';
 import * as DocumentPicker from 'expo-document-picker';
 
 const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -87,6 +89,8 @@ export default function AddRepair({ navigation, route }) {
   const hasPhoto = !!proofFile;
   const [notes,       setNotes]       = useState('');
   const [saving,      setSaving]      = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);   // the "Save this repair?" card
+  const [showErrors, setShowErrors] = useState(false);       // turns on after the first tap on Save
   const [focusedField, setFocusedField] = useState(null);
 
   const currentTypeConfig = REPAIR_TYPES.find((t) => t.id === repairType);
@@ -98,6 +102,12 @@ export default function AddRepair({ navigation, route }) {
   if (!odometer.trim()) missing.push('odometer');
   if (requiresProof && !hasPhoto) missing.push('receipt photo or PDF');
   const canSave = missing.length === 0;
+
+  // Odometer: any number is accepted (up to 6 digits). It is deliberately NOT compared with earlier
+  // readings, because an old repair can be logged late and an odometer can be replaced or reset.
+  // Red + "required" only shows after the user has tried to save without one.
+  const MAX_ODOMETER_DIGITS = 6;
+  const odometerMissing = showErrors && !odometer.trim();
 
   // Tap to choose a receipt photo or PDF; tap again to remove it.
   const pickProof = async () => {
@@ -134,18 +144,11 @@ export default function AddRepair({ navigation, route }) {
   const handleConfirm = () => {
     if (saving) return;
     if (!canSave) {
+      setShowErrors(true);
       Alert.alert('Almost there', `Please add: ${missing.join(', ')}.`);
       return;
     }
-    const costText = cost.trim() ? `\nCost: ₱${cost.trim()}` : '';
-    Alert.alert(
-      'Save this repair?',
-      `${title.trim()}\n${repairType}\nOdometer: ${odometer} ${distanceUnit(useMetric)}${costText}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Save', onPress: handleSave },
-      ]
-    );
+    setConfirmOpen(true);
   };
 
   const handleSave = async () => {
@@ -307,11 +310,15 @@ export default function AddRepair({ navigation, route }) {
                 Odometer ({distanceUnit(useMetric)}) <Text style={styles.requiredAsterisk}>*</Text>
               </Text>
               <TextInput
-                style={[styles.input, focusedField === 'odometer' && styles.inputFocused]}
+                style={[
+                  styles.input,
+                  focusedField === 'odometer' && styles.inputFocused,
+                  odometerMissing && styles.inputError,
+                ]}
                 placeholder="e.g. 21300"
                 placeholderTextColor={COLORS.textMuted}
                 value={odometer}
-                onChangeText={(t) => setOdometer(t.replace(/[^0-9]/g, ''))}
+                onChangeText={(t) => setOdometer(formatInteger(t, MAX_ODOMETER_DIGITS))}
                 onFocus={() => setFocusedField('odometer')}
                 onBlur={() => setFocusedField(null)}
                 keyboardType="numeric"
@@ -329,7 +336,7 @@ export default function AddRepair({ navigation, route }) {
                   placeholder="0.00"
                   placeholderTextColor={COLORS.textMuted}
                   value={cost}
-                  onChangeText={(t) => setCost(t.replace(/[^0-9.]/g, ''))}
+                  onChangeText={(t) => setCost(formatMoney(t))}
                   onFocus={() => setFocusedField('cost')}
                   onBlur={() => setFocusedField(null)}
                   keyboardType="numeric"
@@ -339,6 +346,8 @@ export default function AddRepair({ navigation, route }) {
               </View>
             </View>
           </View>
+
+          {odometerMissing && <Text style={styles.errorText}>Odometer is required.</Text>}
 
           {/* Photo proof */}
           <View style={styles.fieldBlock}>
@@ -434,6 +443,24 @@ export default function AddRepair({ navigation, route }) {
           </Touchable>
         </View>
       </KeyboardAvoidingView>
+
+      <ConfirmCard
+        visible={confirmOpen}
+        icon="construct"
+        title="Save this repair?"
+        headline={title.trim()}
+        subline={repairType}
+        rows={[
+          { label: 'Odometer', value: `${odometer} ${distanceUnit(useMetric)}` },
+          ...(cost.trim() ? [{ label: 'Cost', value: `₱${cost.trim()}` }] : []),
+        ]}
+        confirmLabel="Save"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          handleSave();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -533,6 +560,16 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: COLORS.primary,
     borderWidth: 1.5,
+  },
+  inputError: {
+    borderColor: COLORS.danger,
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 13,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.lg,
   },
   textarea: {
     height: 90,
