@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api, sortDesc } from '../lib/api';
+import { parseDateInput } from '../lib/dateParse';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
 const MAX_FILE_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -235,6 +236,16 @@ export default function AddDocument() {
     setShowForm(true);
   };
 
+  // Coming from the "+" on Vehicle Documents: open the upload form straight away, so the
+  // user does not land here and have to tap another upload button.
+  useEffect(() => {
+    if (route?.params?.openForm && vehicle?.id) {
+      navigation.setParams({ openForm: false });   // only once, not every time this screen is shown
+      openForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route?.params?.openForm, vehicle?.id]);
+
   const closeForm = () => {
     if (saving) return;
     setShowForm(false);
@@ -292,12 +303,11 @@ export default function AddDocument() {
     // Validate the date before uploading anything.
     let formattedExpiryDate = null;
     if (expiryDate.trim()) {
-      const parsedExpiry = new Date(expiryDate.trim());
-      if (Number.isNaN(parsedExpiry.getTime())) {
-        Alert.alert('Invalid Date', 'Please enter a valid expiry date.');
+      formattedExpiryDate = parseDateInput(expiryDate);
+      if (!formattedExpiryDate) {
+        Alert.alert('Invalid Date', 'Please enter a real date, like Dec 25, 2026 or 2026-12-25.');
         return;
       }
-      formattedExpiryDate = parsedExpiry.toISOString().split('T')[0];
     }
 
     const mimeType =
@@ -489,18 +499,6 @@ export default function AddDocument() {
               </Touchable>
             ))}
 
-            {/* Add new document card */}
-            <Touchable
-              style={styles.addCard}
-              onPress={openForm}
-              rippleColor="rgba(255,255,255,0.06)"
-            >
-              <View style={styles.addCardInner}>
-                <MaterialIcons name="add-circle" size={36} color={COLORS.textMuted} />
-                <Text style={styles.addCardTitle}>Add New Document</Text>
-                <Text style={styles.addCardHint}>Tap to browse</Text>
-              </View>
-            </Touchable>
           </View>
         )}
       </ScrollView>
@@ -796,28 +794,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 11,
     fontWeight: '600',
-  },
-  addCard: {
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: COLORS.border,
-    borderRadius: RADII.card,
-  },
-  addCardInner: {
-    paddingVertical: SPACING.xxxl,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  addCardTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  addCardHint: {
-    color: COLORS.textMuted,
-    fontSize: 12,
   },
 
   // Add document sheet

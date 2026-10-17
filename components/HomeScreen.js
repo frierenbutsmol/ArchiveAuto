@@ -642,7 +642,8 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.8}
               onPress={() =>
                 navigation.navigate(
-                  'AddMaintenance'
+                  'AddMaintenance',
+                  { vehicle: currentVehicle }
                 )
               }
             >
@@ -676,7 +677,8 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.8}
               onPress={() =>
                 navigation.navigate(
-                  'AddRepair'
+                  'AddRepair',
+                  { vehicle: currentVehicle }
                 )
               }
             >
@@ -721,7 +723,11 @@ export default function HomeScreen({ navigation, route }) {
               style={styles.hubCard}
               onPress={() =>
                 navigation.navigate(
-                  item.screen
+                  item.screen,
+                  {
+                    selectedVehicle: currentVehicle,
+                    vehicle: currentVehicle,
+                  }
                 )
               }
             >

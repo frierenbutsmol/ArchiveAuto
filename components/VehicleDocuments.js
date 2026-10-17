@@ -160,8 +160,10 @@ export default function VehicleDocuments({ navigation }) {
   };
 
   const openAddDocument = () => {
+    // openForm: true opens the upload form right away on the Documents screen.
     navigation.navigate('AddDocument', {
       vehicle: vehicle,
+      openForm: true,
     });
   };
 
@@ -391,22 +393,25 @@ export default function VehicleDocuments({ navigation }) {
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.ctaButton}
-          onPress={openAddDocument}
-          activeOpacity={0.85}>
+        {/* The big button is only for the empty state; the "+" in the header covers the rest. */}
+        {!loading && documents.length === 0 && (
+          <TouchableOpacity
+            style={styles.ctaButton}
+            onPress={openAddDocument}
+            activeOpacity={0.85}>
 
-          <Ionicons
-            name="cloud-upload-outline"
-            size={20}
-            color={COLORS.textInverse}
-            style={{ marginRight: 6 }}
-          />
+            <Ionicons
+              name="cloud-upload-outline"
+              size={20}
+              color={COLORS.textInverse}
+              style={{ marginRight: 6 }}
+            />
 
-          <Text style={styles.ctaText}>
-            Upload Document
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.ctaText}>
+              Upload Document
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

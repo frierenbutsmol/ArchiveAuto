@@ -19,6 +19,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import { useActiveVehicle } from '../lib/useActiveVehicle';
 import ShopPicker from './ShopPicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney } from './FormKit';
@@ -95,7 +96,8 @@ export default function AddMaintenance() {
       ? Math.max(insets.top, StatusBar.currentHeight || 0)
       : insets.top;
 
-  const vehicle = route?.params?.vehicle || route?.params?.selectedVehicle;
+  // The vehicle this record belongs to (passed in, else the one chosen on Home)
+  const vehicle = useActiveVehicle(route?.params?.vehicle || route?.params?.selectedVehicle);
 
   const { useMetric } = useSettings();
   const MILEAGE_UNIT = distanceUnit(useMetric);

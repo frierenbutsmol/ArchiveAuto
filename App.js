@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { api } from './lib/api';
 import { COLORS } from './constants/theme';
+import { AlertHost, installThemedAlert } from './components/ThemedAlert';
 
 import SignIn from './components/SignIn';
 import SignUp from './components/SignUp';
@@ -31,6 +32,9 @@ import ShareVehicle from './components/role/ShareVehicle';
 import { routeForRole } from './lib/roles';
 
 const Stack = createNativeStackNavigator();
+
+// Every Alert.alert(...) in the app now shows the themed dialog (components/ThemedAlert.js).
+installThemedAlert();
 
 export default function App() {
   const navigationRef = useRef(null);
@@ -93,6 +97,7 @@ export default function App() {
   }
 
   return (
+    <>
     <NavigationContainer
       ref={navigationRef}
       onReady={() => Linking.getInitialURL().then(handleDeepLink)}>
@@ -209,5 +214,7 @@ export default function App() {
 
       </Stack.Navigator>
     </NavigationContainer>
+    <AlertHost />
+    </>
   );
 }

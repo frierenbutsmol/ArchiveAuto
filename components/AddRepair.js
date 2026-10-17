@@ -18,6 +18,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import { useActiveVehicle } from '../lib/useActiveVehicle';
 import MechanicPicker from './MechanicPicker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -71,9 +72,11 @@ export default function AddRepair({ navigation, route }) {
   const { useMetric } = useSettings();
   const insets = useSafeAreaInsets();
 
-  const vehicle =
+  // The vehicle this record belongs to (passed in, else the one chosen on Home)
+  const vehicle = useActiveVehicle(
     route?.params?.vehicle ||
-    route?.params?.selectedVehicle;
+    route?.params?.selectedVehicle
+  );
 
   const [repairType,  setRepairType]  = useState('Official Shop');
   const [title,       setTitle]       = useState('');
