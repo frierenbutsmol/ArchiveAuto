@@ -247,7 +247,7 @@ export default function GarageScreen({ navigation }) {
                       resource="vehicles"
                       id={vehicle.id}
                       name={vehicle.name}
-                      message="This also deletes all of its maintenance, repair, parts and document records."
+                      message="This also deletes all of its maintenance, repair and document records."
                       onDeleted={loadVehicles}
                       style={{ marginBottom: 10 }}
                     />

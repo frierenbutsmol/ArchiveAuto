@@ -49,20 +49,34 @@ const Vehicle = model('Vehicle', clean(new Schema({
 }, TS)));
 
 // Date-only fields are kept as 'YYYY-MM-DD' strings, exactly like Supabase `date` columns.
-const MaintenanceRecord = model('MaintenanceRecord', clean(new Schema({
+const maintenanceSchema = new Schema({
   user_id: owner,
   vehicle_id: vehicleRef,
   maintenance_type: String,
   description: String,
   service_date: String,
   mileage: Number,
-  cost: Number,
+  cost: Number,                   // the total; recomputed below when a breakdown is given
+  labor_cost: Number,
+  cost_items: [{ _id: false, name: String, amount: Number }],   // parts / other line items
   shop_name: String,
   parts_replaced: String,
   notes: String,
   added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
   added_by_name: String,
-}, TS)), 'maintenance_records');
+}, TS);
+
+// When the app sends a breakdown, the total is always labour + items, computed here,
+// so the stored total can never disagree with its parts.
+maintenanceSchema.pre('validate', function () {
+  const items = this.cost_items || [];
+  if (items.length || this.labor_cost != null) {
+    const sum = items.reduce((t, i) => t + (Number(i.amount) || 0), 0) + (Number(this.labor_cost) || 0);
+    this.cost = Math.round(sum * 100) / 100;
+  }
+});
+
+const MaintenanceRecord = model('MaintenanceRecord', clean(maintenanceSchema), 'maintenance_records');
 
 const Repair = model('Repair', clean(new Schema({
   user_id: owner,

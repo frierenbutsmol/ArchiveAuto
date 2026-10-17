@@ -311,7 +311,7 @@ export default function AIChat() {
             <Text style={styles.emptyTitle}>Hi, I'm your ArchiveAuto Assistant</Text>
             <Text style={styles.emptySubtitle}>
               {isVehicleMode
-                ? 'I can answer using your vehicle’s maintenance, repair, parts, and document records.'
+                ? 'I can answer using your vehicle’s maintenance, repair, and document records.'
                 : 'I can help with general car care and maintenance questions.'}
             </Text>
             <View style={styles.starterWrap}>
@@ -358,7 +358,7 @@ export default function AIChat() {
               style={styles.composerInput}
               placeholder={
                 isVehicleMode
-                  ? 'Ask about your vehicle maintenance, parts, or repairs...'
+                  ? 'Ask about your vehicle maintenance, repairs, or documents...'
                   : 'Ask any car care or maintenance question...'
               }
               placeholderTextColor={COLORS.textMuted}

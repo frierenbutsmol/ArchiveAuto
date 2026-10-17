@@ -60,7 +60,6 @@ export default function AdminStats() {
               <Stat value={stats.vehicles} label="Vehicles" />
               <Stat value={stats.maintenance_records} label="Maintenance records" />
               <Stat value={stats.repairs} label="Repairs" />
-              <Stat value={stats.parts_replacements} label="Parts replaced" />
               <Stat value={stats.documents} label="Documents" />
             </View>
           </>

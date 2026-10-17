@@ -118,6 +118,19 @@ const MILEAGE = number({ min: 0, max: 10000000 });
 const MONEY = number({ min: 0, max: 100000000 });
 const vehicleRef = { rule: objectId(), required: true };
 
+// [{ name, amount }, ...] - the parts / items that make up a cost (30 at most).
+const costItems = () => (v, label) => {
+  if (!Array.isArray(v)) fail(`${label} must be a list.`);
+  if (v.length > 30) fail(`${label} can have 30 items at most.`);
+  return v.map((it, i) => {
+    if (!it || typeof it !== 'object') fail(`${label} item ${i + 1} is invalid.`);
+    return {
+      name: text({ max: 80 })(it.name == null ? '' : it.name, `${label} item ${i + 1} name`),
+      amount: MONEY(it.amount, `${label} item ${i + 1} amount`),
+    };
+  });
+};
+
 const schemas = {
   register: {
     email: { rule: email(), required: true },
@@ -155,6 +168,8 @@ const schemas = {
     service_date: date(),
     mileage: MILEAGE,
     cost: MONEY,
+    labor_cost: MONEY,
+    cost_items: costItems(),
     shop_name: text({ max: 100 }),
     parts_replaced: text({ max: 300 }),
     notes: text({ max: 2000 }),

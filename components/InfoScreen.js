@@ -36,7 +36,7 @@ const PAGES = {
   privacy: {
     title: 'Privacy Policy',
     blocks: [
-      { h: 'What we store', p: 'Your email, display name, and the vehicles, maintenance, repair, parts and document records you add.' },
+      { h: 'What we store', p: 'Your email, display name, and the vehicles, maintenance, repair and document records you add.' },
       { h: 'How we use it', p: 'To show your records, calculate reminders, send password-reset emails, and answer questions in the AI assistant. We do not sell your data.' },
       { h: 'AI assistant', p: 'When you ask the assistant a question, your message and, in Vehicle Aware mode, that vehicle\'s records are sent to Google\'s Gemini service to generate a reply.' },
       { h: 'Your choices', p: `You can delete any vehicle or record in the app. To delete your account and data, email ${SUPPORT_EMAIL}.` },

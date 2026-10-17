@@ -16,7 +16,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADII } from '../constants/theme';
-import { useSettings } from '../lib/settings';
+import { useSettings, loadSettings } from '../lib/settings';
+import { fetchAlerts } from '../lib/alerts';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
 
@@ -65,11 +66,29 @@ export default function HomeScreen({ navigation, route }) {
   const [recordCounts, setRecordCounts] = useState({
     maintenance: 0,
     repairs: 0,
-    parts: 0,
     documents: 0,
   });
 
   const [reminder, setReminder] = useState(null);
+
+  // The dot on the bell: only when there is an alert the user hasn't opened yet.
+  // Peeks without marking anything as seen, so it clears once the Alerts screen is opened.
+  const [showAlertDot, setShowAlertDot] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        try {
+          const alertSettings = await loadSettings();
+          const { alerts } = await fetchAlerts(alertSettings, { markSeen: false });
+          if (alive) setShowAlertDot(alerts.some((a) => a.unread));
+        } catch {
+          if (alive) setShowAlertDot(false);
+        }
+      })();
+      return () => { alive = false; };
+    }, [])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -176,12 +195,10 @@ export default function HomeScreen({ navigation, route }) {
       const [
         maintenanceResult,
         repairsResult,
-        partsResult,
         documentsResult,
       ] = await Promise.all([
         api.list('maintenance_records', { vehicle_id: vehicleId }),
         api.list('repairs', { vehicle_id: vehicleId }),
-        api.list('parts_replacements', { vehicle_id: vehicleId }),
         api.list('documents', { vehicle_id: vehicleId }),
       ]);
 
@@ -190,8 +207,6 @@ export default function HomeScreen({ navigation, route }) {
           maintenanceResult.data?.length || 0,
         repairs:
           repairsResult.data?.length || 0,
-        parts:
-          partsResult.data?.length || 0,
         documents:
           documentsResult.data?.length || 0,
       });
@@ -230,19 +245,6 @@ export default function HomeScreen({ navigation, route }) {
       count: `${recordCounts.repairs} records`,
       badgeColor: COLORS.success,
       screen: 'RepairList',
-    },
-    {
-      id: 'parts',
-      icon: 'cog-outline',
-      title: 'Parts Replacement',
-      desc: 'Brake pads, battery, belt replacements',
-      count: `${recordCounts.parts} ${
-        recordCounts.parts === 1
-          ? 'item'
-          : 'items'
-      }`,
-      badgeColor: COLORS.warning,
-      screen: 'PartsReplacement',
     },
     {
       id: 'documents',
@@ -396,20 +398,14 @@ export default function HomeScreen({ navigation, route }) {
                 color={COLORS.textPrimary}
               />
 
-              <View
-                style={
-                  styles.notifBadgeDot
-                }
-              />
+              {showAlertDot && (
+                <View
+                  style={
+                    styles.notifBadgeDot
+                  }
+                />
+              )}
             </TouchableOpacity>
-
-            <View style={styles.avatar}>
-              <MaterialCommunityIcons
-                name="account-outline"
-                size={21}
-                color={COLORS.textPrimary}
-              />
-            </View>
           </View>
         </View>
 
@@ -876,7 +872,7 @@ export default function HomeScreen({ navigation, route }) {
                 style={styles.historyText}
               >
                 Review maintenance, repairs,
-                parts, and documents recorded
+                and documents recorded
                 for this vehicle.
               </Text>
             </View>

@@ -21,8 +21,6 @@ import MaintenanceList from './components/MaintenanceList';
 import AddMaintenance from './components/AddMaintenance';
 import RepairList from './components/RepairList';
 import AddRepair from './components/AddRepair';
-import PartsReplacement from './components/PartsReplacement';
-import AddPart from './components/AddPart';
 import VehicleDocuments from './components/VehicleDocuments';
 import AddDocument from './components/AddDocument';
 import MechanicTabs from './components/role/MechanicTabs';
@@ -197,16 +195,6 @@ export default function App() {
           name="AddRepair"
           component={AddRepair}
           options={{ presentation: 'modal' }}
-        />
-
-        <Stack.Screen
-          name="PartsReplacement"
-          component={PartsReplacement}
-        />
-
-        <Stack.Screen
-          name="AddPart"
-          component={AddPart}
         />
 
         <Stack.Screen

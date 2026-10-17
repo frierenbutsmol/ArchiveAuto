@@ -19,13 +19,19 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
-import MechanicSuggestions from './MechanicSuggestions';
+import ShopPicker from './ShopPicker';
+import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney } from './FormKit';
 
 // Fixed height of the app bar itself (status bar space is added via marginTop).
 const TOP_BAR_HEIGHT = 64;
 
 
 const SERVICE_TYPES = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery', 'Other'];
+
+// Categories that have a service interval. The odometer reading is what lets the
+// Alerts screen work out when each one is next due, so it is asked for as soon as
+// one of these is ticked. "Other" has no interval, so it doesn't need it.
+const NEEDS_MILEAGE = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery'];
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
@@ -57,6 +63,8 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
   );
 }
 
+const MAX_COST_ITEMS = 20;
+
 const todayISO = () => new Date().toISOString().split('T')[0];
 
 const isValidDate = (value) => {
@@ -87,17 +95,26 @@ export default function AddMaintenance() {
   const [serviceTypes, setServiceTypes] = useState([route?.params?.serviceType || 'Oil Change']);
   const toggleServiceType = (type) =>
     setServiceTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]));
-  const [taskName, setTaskName] = useState('');
   const [date, setDate] = useState(todayISO());
   const [mileage, setMileage] = useState('');
-  const [cost, setCost] = useState('');
+  const [laborCost, setLaborCost] = useState('');
+  const [partItems, setPartItems] = useState([]);   // [{ key, name, amount }]
+  const addPartItem = () =>
+    setPartItems((prev) =>
+      prev.length >= MAX_COST_ITEMS ? prev : [...prev, { key: String(Date.now() + prev.length), name: '', amount: '' }]
+    );
+  const updatePartItem = (key, patch) =>
+    setPartItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
+  const removePartItem = (key) => setPartItems((prev) => prev.filter((it) => it.key !== key));
+  // The total is never typed: it is always labour + every item.
+  const totalCost =
+    Math.round((toNumber(laborCost) + partItems.reduce((t, it) => t + toNumber(it.amount), 0)) * 100) / 100;
   const [shopName, setShopName] = useState('');
-  const [partsReplaced, setPartsReplaced] = useState('');
   const [notes, setNotes] = useState('');
-  const [focusedField, setFocusedField] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const canSave = serviceTypes.length > 0 && taskName.trim() !== '' && mileage.trim() !== '';
+  const needsMileage = serviceTypes.some((t) => NEEDS_MILEAGE.includes(t));
+  const canSave = serviceTypes.length > 0 && (!needsMileage || mileage.trim() !== '');
 
   const handleCancel = () => {
     if (navigation.canGoBack()) {
@@ -113,13 +130,16 @@ export default function AddMaintenance() {
       return;
     }
 
-    const mileageValue = parseInt(mileage.replace(/[^0-9]/g, ''), 10);
-    if (Number.isNaN(mileageValue)) {
+    const mileageValue = needsMileage ? parseInt(mileage.replace(/[^0-9]/g, ''), 10) : NaN;
+    if (needsMileage && Number.isNaN(mileageValue)) {
       Alert.alert('Invalid Odometer', 'Please enter a valid odometer reading.');
       return;
     }
 
-    const costValue = parseFloat(cost.replace(/[^0-9.]/g, ''));
+    const laborValue = toNumber(laborCost);
+    const items = partItems
+      .map((it) => ({ name: it.name.trim() || 'Item', amount: toNumber(it.amount) }))
+      .filter((it) => it.amount > 0);
 
     const serviceDate = date.trim() || todayISO();
     if (!isValidDate(serviceDate)) {
@@ -138,15 +158,13 @@ export default function AddMaintenance() {
       const { data, error } = await api.create('maintenance_records', {
           vehicle_id: vehicle.id,
           maintenance_type: serviceTypes.join(', '),   // e.g. "Oil Change, Brakes"
-          description: taskName.trim(),
           service_date: serviceDate,
-          mileage: displayToKm(mileageValue, useMetric),
-          cost: Number.isNaN(costValue) ? null : costValue,
+          mileage: Number.isNaN(mileageValue) ? null : displayToKm(mileageValue, useMetric),
+          cost: totalCost > 0 ? totalCost : null,   // the server recomputes this from the parts below
+          ...(laborValue > 0 ? { labor_cost: laborValue } : {}),
+          ...(items.length ? { cost_items: items } : {}),
           shop_name: shopName.trim() || null,
           notes: notes.trim() || null,
-          // Only sent when filled in, so saving still works if the
-          // `parts_replaced` column hasn't been added to the table yet.
-          ...(partsReplaced.trim() ? { parts_replaced: partsReplaced.trim() } : {}),
       });
 
       if (error) {
@@ -209,8 +227,7 @@ export default function AddMaintenance() {
           {/* Form card */}
           <View style={styles.formCard}>
             {/* Service Category */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>SERVICE CATEGORY</Text>
+            <Field label="Service Category" required>
               <View style={styles.checkGrid}>
                 {SERVICE_TYPES.map((type) => {
                   const checked = serviceTypes.includes(type);
@@ -234,137 +251,88 @@ export default function AddMaintenance() {
               {serviceTypes.length === 0 && (
                 <Text style={styles.checkError}>Pick at least one category.</Text>
               )}
-            </View>
-
-            {/* Task Name */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>
-                TASK NAME <Text style={styles.requiredAsterisk}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, focusedField === 'taskName' && styles.inputFocused]}
-                placeholder="e.g., Fully Synthetic Oil Change"
-                placeholderTextColor={COLORS.textMuted}
-                value={taskName}
-                onChangeText={setTaskName}
-                onFocus={() => setFocusedField('taskName')}
-                onBlur={() => setFocusedField(null)}
-                underlineColorAndroid="transparent"
-                selectionColor={COLORS.primary}
-              />
-            </View>
+            </Field>
 
             {/* Date */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>DATE</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'date' && styles.inputFocused]}
+            <Field label="Date">
+              <BoxInput
                 placeholder="YYYY-MM-DD"
-                placeholderTextColor={COLORS.textMuted}
                 value={date}
                 onChangeText={setDate}
-                onFocus={() => setFocusedField('date')}
-                onBlur={() => setFocusedField(null)}
                 keyboardType="numbers-and-punctuation"
                 maxLength={10}
-                underlineColorAndroid="transparent"
-                selectionColor={COLORS.primary}
               />
-            </View>
+            </Field>
 
-            {/* Mileage & Cost */}
-            <View style={styles.twoColumnRow}>
-              <View style={[styles.fieldBlock, styles.column]}>
-                <Text style={styles.fieldLabel}>
-                  MILEAGE <Text style={styles.requiredAsterisk}>*</Text>
-                </Text>
-                <View style={styles.mileageRow}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.mileageInput,
-                      focusedField === 'mileage' && styles.inputFocused,
-                    ]}
-                    placeholder="24500"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={mileage}
-                    onChangeText={(text) => setMileage(text.replace(/[^0-9]/g, ''))}
-                    onFocus={() => setFocusedField('mileage')}
-                    onBlur={() => setFocusedField(null)}
-                    keyboardType="numeric"
-                    underlineColorAndroid="transparent"
-                    selectionColor={COLORS.primary}
+            {/* Mileage (only for categories that have a service interval) */}
+            {needsMileage && (
+              <Field
+                label={`Current Mileage (${MILEAGE_UNIT})`}
+                required
+                hint="The number on your dashboard right now (up to 999,999)."
+              >
+                <MileageInput value={mileage} onChangeText={setMileage} />
+              </Field>
+            )}
+
+            {/* Cost breakdown: the total is calculated, not typed */}
+            <Field label="Cost Breakdown (₱)">
+              <View style={styles.costRow}>
+                <Text style={styles.costRowLabel}>Labor</Text>
+                <AmountInput style={styles.costAmount} value={laborCost} onChangeText={setLaborCost} />
+              </View>
+
+              {partItems.map((item) => (
+                <View key={item.key} style={[styles.costRow, { marginTop: SPACING.sm }]}>
+                  <BoxInput
+                    style={styles.costName}
+                    placeholder="Part (e.g., Oil filter)"
+                    value={item.name}
+                    maxLength={80}
+                    onChangeText={(text) => updatePartItem(item.key, { name: text })}
                   />
-                  <Text style={styles.mileageUnit}>{MILEAGE_UNIT}</Text>
+                  <AmountInput
+                    style={styles.costAmount}
+                    value={item.amount}
+                    onChangeText={(text) => updatePartItem(item.key, { amount: text })}
+                  />
+                  <TouchableOpacity
+                    onPress={() => removePartItem(item.key)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel="Remove item"
+                  >
+                    <MaterialIcons name="close" size={20} color={COLORS.textMuted} />
+                  </TouchableOpacity>
                 </View>
-              </View>
+              ))}
 
-              <View style={[styles.fieldBlock, styles.column]}>
-                <Text style={styles.fieldLabel}>TOTAL COST (₱)</Text>
-                <TextInput
-                  style={[styles.input, focusedField === 'cost' && styles.inputFocused]}
-                  placeholder="2500"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={cost}
-                  onChangeText={(text) => setCost(text.replace(/[^0-9.]/g, ''))}
-                  onFocus={() => setFocusedField('cost')}
-                  onBlur={() => setFocusedField(null)}
-                  keyboardType="decimal-pad"
-                  underlineColorAndroid="transparent"
-                  selectionColor={COLORS.primary}
-                />
+              {partItems.length < MAX_COST_ITEMS && (
+                <TouchableOpacity style={styles.addItemButton} onPress={addPartItem} activeOpacity={0.7}>
+                  <MaterialIcons name="add" size={18} color={COLORS.primary} />
+                  <Text style={styles.addItemText}>Add part or item</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>TOTAL</Text>
+                <Text style={styles.totalValue}>₱{formatMoney(totalCost)}</Text>
               </View>
-            </View>
+            </Field>
 
             {/* Shop / Provider */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>SERVICE PROVIDER / SHOP (OPTIONAL)</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'shopName' && styles.inputFocused]}
-                placeholder="e.g., Shell Helix Oil Service Center"
-                placeholderTextColor={COLORS.textMuted}
-                value={shopName}
-                onChangeText={setShopName}
-                onFocus={() => setFocusedField('shopName')}
-                onBlur={() => setFocusedField(null)}
-                underlineColorAndroid="transparent"
-                selectionColor={COLORS.primary}
-              />
-              <MechanicSuggestions value={shopName} onSelect={setShopName} />
-            </View>
-
-            {/* Parts Replaced */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>PARTS REPLACED (OPTIONAL)</Text>
-              <TextInput
-                style={[styles.input, focusedField === 'partsReplaced' && styles.inputFocused]}
-                placeholder="e.g., Oil filter, Brake pads"
-                placeholderTextColor={COLORS.textMuted}
-                value={partsReplaced}
-                onChangeText={setPartsReplaced}
-                onFocus={() => setFocusedField('partsReplaced')}
-                onBlur={() => setFocusedField(null)}
-                underlineColorAndroid="transparent"
-                selectionColor={COLORS.primary}
-              />
-            </View>
+            <Field label="Service Provider (optional)">
+              <ShopPicker value={shopName} onChange={setShopName} />
+            </Field>
 
             {/* Notes */}
-            <View style={[styles.fieldBlock, { marginTop: 4 }]}>
-              <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
-              <TextInput
-                style={styles.textarea}
-                placeholder="Details on oil grade, filter brand, or recommendations..."
-                placeholderTextColor={COLORS.textMuted}
+            <Field label="Notes (optional)">
+              <BoxInput
+                placeholder="Oil grade, filter brand, parts replaced, recommendations..."
                 value={notes}
                 onChangeText={setNotes}
                 multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                underlineColorAndroid="transparent"
-                selectionColor={COLORS.primary}
               />
-            </View>
+            </Field>
 
             {/* Info banner */}
             <View style={styles.infoBanner}>
@@ -481,11 +449,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   formCard: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: RADII.card,
-    padding: SPACING.lg,
     gap: SPACING.lg,
-    ...Platform.select({ android: { elevation: 1 } }),
   },
   fieldBlock: {
     gap: SPACING.sm,
@@ -607,6 +571,58 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 16,
     marginLeft: SPACING.sm,
+  },
+  hintText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
+  costRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  costRowLabel: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+  },
+  costName: {
+    flex: 1,
+  },
+  costAmount: {
+    width: 130,
+  },
+  addItemButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+  },
+  addItemText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: SPACING.md,
+    marginTop: SPACING.xs,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  totalLabel: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  totalValue: {
+    color: COLORS.primary,
+    fontSize: 20,
+    fontWeight: '700',
   },
   textarea: {
     backgroundColor: COLORS.surfaceSubtle,
