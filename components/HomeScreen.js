@@ -329,10 +329,6 @@ export default function HomeScreen({ navigation, route }) {
       currentVehicle.series || ''
     } ${currentVehicle.year || ''}`.trim();
 
-  const plateNumber =
-    currentVehicle.plate_number ||
-    'No Plate';
-
   const mileage = formatDistance(currentVehicle.current_mileage || 0, useMetric);
 
   const fuelType =
@@ -437,16 +433,6 @@ export default function HomeScreen({ navigation, route }) {
             <View
               style={styles.vehicleTopRow}
             >
-              <View
-                style={styles.plateBadge}
-              >
-                <Text
-                  style={styles.plateText}
-                >
-                  {plateNumber}
-                </Text>
-              </View>
-
               <TouchableOpacity
                 style={
                   styles.editVehicleBtn
@@ -853,24 +839,6 @@ export default function HomeScreen({ navigation, route }) {
                 {fuelType}
               </Text>
             </View>
-
-            <View
-              style={styles.specDivider}
-            />
-
-            <View style={styles.specRow}>
-              <Text
-                style={styles.specLabel}
-              >
-                Plate Number
-              </Text>
-
-              <Text
-                style={styles.specValue}
-              >
-                {plateNumber}
-              </Text>
-            </View>
           </View>
         </View>
 
@@ -1022,26 +990,8 @@ const styles = StyleSheet.create({
 
   vehicleTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-  },
-
-  plateBadge: {
-    backgroundColor:
-      'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal:
-      SPACING.sm + 2,
-    paddingVertical: 4,
-    borderRadius: RADII.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  plateText: {
-    color: COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
   },
 
   editVehicleBtn: {

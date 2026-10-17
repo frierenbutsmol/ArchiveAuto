@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
@@ -44,6 +44,30 @@ export default function SignUp() {
 
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);   // Terms and Conditions checkbox
+
+  // Red errors should only show after the user taps Create Account.
+  // Clear them whenever the account type changes or the user leaves this screen.
+  const clearValidation = () => {
+    setSubmitted(false);
+    setEmailTouched(false);
+    setConfirmTouched(false);
+    setEmailTaken(false);
+    setFormError('');
+  };
+
+  const handleSelectRole = (value) => {
+    if (value === role) return;
+    setRole(value);
+    clearValidation();
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      // The cleanup runs when the screen loses focus (e.g. opening the Terms page).
+      return () => clearValidation();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
 
   // Password requirements
   const passwordRequirements = [
@@ -215,7 +239,7 @@ export default function SignUp() {
                   <TouchableOpacity
                     key={opt.value}
                     activeOpacity={0.85}
-                    onPress={() => setRole(opt.value)}
+                    onPress={() => handleSelectRole(opt.value)}
                     style={[styles.roleChip, active && styles.roleChipActive]}
                   >
                     <Ionicons

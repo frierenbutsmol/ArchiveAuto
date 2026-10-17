@@ -90,7 +90,6 @@ export default function GarageScreen({ navigation }) {
         brand: vehicle.make,
         model: vehicle.series,
         year: vehicle.year,
-        plate: vehicle.plate_number || 'No plate',
         fuel: vehicle.fuel_type || 'Not specified',
         mileage:
           vehicle.current_mileage != null
@@ -223,9 +222,6 @@ export default function GarageScreen({ navigation }) {
                       </View>
 
                       <View style={styles.tagsRow}>
-                        <View style={styles.tagPill}>
-                          <Text style={styles.tagText}>{vehicle.plate}</Text>
-                        </View>
                         <View style={styles.tagPill}>
                           <Text style={styles.tagText}>{vehicle.fuel}</Text>
                         </View>

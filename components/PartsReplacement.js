@@ -23,6 +23,10 @@ import DeleteButton from './DeleteButton';
 // opacity dimming on iOS.
 function Touchable({ onPress, style, children, rippleColor, borderless = false }) {
   if (Platform.OS === 'android') {
+    // The icon/content sits in an inner view that fills the button, so it needs the
+    // button's own centering too, otherwise it ends up in the top-left corner.
+    const flat = StyleSheet.flatten(style) || {};
+    const innerLayout = { alignItems: flat.alignItems, justifyContent: flat.justifyContent };
     return (
       <View style={[style, { overflow: 'hidden' }]}>
         <TouchableNativeFeedback
@@ -31,7 +35,7 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false }
             rippleColor || 'rgba(255,255,255,0.08)',
             borderless
           )}>
-          <View style={styles.rippleFill}>{children}</View>
+          <View style={[styles.rippleFill, innerLayout]}>{children}</View>
         </TouchableNativeFeedback>
       </View>
     );

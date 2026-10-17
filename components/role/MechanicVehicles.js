@@ -60,7 +60,6 @@ export default function MechanicVehicles() {
                   <Text style={ui.cardTitle} numberOfLines={1}>{vehicleName(item)}</Text>
                   <Text style={ui.cardMeta}>
                     {[item.year, item.make, item.series].filter(Boolean).join(' ')}
-                    {item.plate_number ? `  ·  ${item.plate_number}` : ''}
                   </Text>
                   <Text style={ui.cardMuted}>Owner: {item.owner_name || 'Unknown'}</Text>
                 </View>

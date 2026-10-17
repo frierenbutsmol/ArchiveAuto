@@ -28,12 +28,35 @@ const VEHICLE_TYPES = [
   { id: 'truck',      label: 'Truck',      icon: 'truck'         },
 ];
 
-const FUEL_TYPES = ['Gasoline', 'Diesel', 'Hybrid', 'Electric'];
+// Fuel types for vehicles sold and driven in the Philippines.
+const FUEL_TYPES = ['Gasoline', 'Diesel', 'LPG', 'Hybrid', 'Plug-in Hybrid', 'Electric'];
+
+// The last year in the vehicle catalog data. A model whose range ends here is still on sale,
+// so its year list continues to the current year (otherwise a brand-new car could not be picked).
+// Update this number when the catalog is refreshed with newer years.
+const CATALOG_LAST_YEAR = 2025;
+
+// Years an owner can pick for a catalog model, newest first.
+// { year_from: 2003, year_to: 2025 } -> ['2026', '2025', ..., '2003'].  null when there is no usable range.
+function yearsFor(range) {
+  if (!range) return null;
+  const from = Number(range.year_from);
+  const catalogTo = Number(range.year_to);
+  if (!Number.isFinite(from) || !Number.isFinite(catalogTo) || from > catalogTo) return null;
+  const to = catalogTo >= CATALOG_LAST_YEAR ? Math.max(catalogTo, new Date().getFullYear()) : catalogTo;
+  const years = [];
+  for (let y = to; y >= from; y--) years.push(String(y));
+  return years;
+}
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
 function Touchable({ onPress, style, children, rippleColor, borderless = false, disabled = false }) {
   if (Platform.OS === 'android') {
+    // The icon/content sits in an inner view that fills the button, so it needs the
+    // button's own centering too, otherwise it ends up in the top-left corner.
+    const flat = StyleSheet.flatten(style) || {};
+    const innerLayout = { alignItems: flat.alignItems, justifyContent: flat.justifyContent };
     return (
       <View style={[style, { overflow: 'hidden' }]}>
         <TouchableNativeFeedback
@@ -44,7 +67,7 @@ function Touchable({ onPress, style, children, rippleColor, borderless = false, 
             borderless
           )}
         >
-          <View style={{ flex: 1 }}>{children}</View>
+          <View style={[{ flex: 1 }, innerLayout]}>{children}</View>
         </TouchableNativeFeedback>
       </View>
     );
@@ -82,20 +105,13 @@ export default function AddVehicle() {
   const [nickname, setNickname] = useState(
     isEdit ? vehicleToEdit?.name || vehicleToEdit?.nickname || '' : ''
   );
-  const [plateNumber, setPlateNumber] = useState(
-    isEdit
-      ? vehicleToEdit?.plate ||
-        vehicleToEdit?.plateNumber ||
-        vehicleToEdit?.plate_number || ''
-      : ''
-  );
-  const [fuelType, setFuelType] = useState(
-    isEdit
-      ? vehicleToEdit?.fuel ||
-        vehicleToEdit?.fuelType ||
-        vehicleToEdit?.fuel_type || ''
-      : ''
-  );
+  const [fuelType, setFuelType] = useState(() => {
+    const saved = isEdit
+      ? vehicleToEdit?.fuel || vehicleToEdit?.fuelType || vehicleToEdit?.fuel_type || ''
+      : '';
+    // Older vehicles may have no fuel type ("Not specified"); the user picks one when editing.
+    return FUEL_TYPES.includes(saved) ? saved : '';
+  });
   const [tankCapacity, setTankCapacity] = useState(
     isEdit && vehicleToEdit?.tankCapacity != null
       ? String(vehicleToEdit.tankCapacity)
@@ -111,6 +127,7 @@ export default function AddVehicle() {
     setVehicleType(typeId);
     setBrand('');
     setModel('');
+    setYear('');
   };
 
   // Brands and models come from the database catalog (1995-2025, /catalog/makes and /catalog/models),
@@ -142,19 +159,26 @@ export default function AddVehicle() {
   const modelOptions = withCurrent(modelChoices(vehicleType, brand, dbModels), model);
   const modelYears = Object.fromEntries((dbModels || []).map((m) => [m.model, `${m.year_from}\u2013${m.year_to}`]));
 
-  // Gentle hint (never blocks saving) when the year is outside the years listed for the model.
-  const yearNum = /^\d{4}$/.test(year) ? Number(year) : null;
+  // The year list follows the chosen model (e.g. Vios 2003\u20132025 gives 2026 down to 2003).
+  // A model that is not in the catalog has no year range, so the year is typed instead.
   const pickedModel = (dbModels || []).find((m) => m.model === model);
-  const yearHint =
-    pickedModel && yearNum !== null && (yearNum < pickedModel.year_from || yearNum > pickedModel.year_to)
-      ? `${pickedModel.model} is listed for ${pickedModel.year_from}\u2013${pickedModel.year_to}. You can still save ${yearNum}.`
-      : null;
+  const catalogYears = yearsFor(pickedModel);
+  const yearOptions = catalogYears ? withCurrent(catalogYears, year) : null;   // a saved year stays selectable when editing
+
+  // Picking another model keeps the year only if that model was also made in that year.
+  const handleModelChange = (nextModel) => {
+    if (nextModel === model) return;
+    setModel(nextModel);
+    const nextYears = yearsFor((dbModels || []).find((m) => m.model === nextModel));
+    if (nextYears && !nextYears.includes(year)) setYear('');
+  };
 
   const canSave =
     vehicleType !== '' &&
     brand.trim() !== '' &&
     model.trim() !== '' &&
-    year.trim() !== '';
+    /^\d{4}$/.test(year.trim()) &&
+    fuelType !== '';
 
   const handleConfirm = async () => {
     if (!canSave || saving) return;
@@ -176,8 +200,7 @@ export default function AddVehicle() {
         series:        model.trim(),
         year:          parseInt(year, 10),
         nickname:      nickname.trim() || `${brand.trim()} ${model.trim()}`,
-        plate_number:  plateNumber.trim() || null,
-        fuel_type:     fuelType || null,
+        fuel_type:     fuelType,
         tank_capacity: Number.isNaN(parsedTankCapacity) ? null : parsedTankCapacity,
       };
 
@@ -299,7 +322,9 @@ export default function AddVehicle() {
 
           {/* Nickname */}
           <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>Vehicle Nickname</Text>
+            <Text style={styles.fieldLabel}>
+              Vehicle Nickname <Text style={styles.optionalTag}>(optional)</Text>
+            </Text>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
@@ -312,42 +337,29 @@ export default function AddVehicle() {
             </View>
           </View>
 
-          {/* Plate & Tank Capacity */}
-          <View style={styles.twoColumnRow}>
-            <View style={[styles.fieldBlock, styles.rowField]}>
-              <Text style={styles.fieldLabel}>Plate Number</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. ABC 1234"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={plateNumber}
-                  onChangeText={setPlateNumber}
-                  autoCapitalize="characters"
-                  selectionColor={COLORS.primary}
-                />
-              </View>
-            </View>
-
-            <View style={[styles.fieldBlock, styles.rowField]}>
-              <Text style={styles.fieldLabel}>Tank Capacity (L)</Text>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 70"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={tankCapacity}
-                  onChangeText={(t) => setTankCapacity(t.replace(/[^0-9.]/g, ''))}
-                  keyboardType="decimal-pad"
-                  selectionColor={COLORS.primary}
-                />
-              </View>
+          {/* Tank Capacity */}
+          <View style={styles.fieldBlock}>
+            <Text style={styles.fieldLabel}>
+              Tank Capacity (L) <Text style={styles.optionalTag}>(optional)</Text>
+            </Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Leave blank if you're not sure"
+                placeholderTextColor={COLORS.textMuted}
+                value={tankCapacity}
+                onChangeText={(t) => setTankCapacity(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                selectionColor={COLORS.primary}
+              />
             </View>
           </View>
 
           {/* Fuel Type */}
           <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>Fuel Type</Text>
+            <Text style={styles.fieldLabel}>
+              Fuel Type <Text style={styles.requiredAsterisk}>*</Text>
+            </Text>
             <View style={styles.fuelTypeRow}>
               {FUEL_TYPES.map((f) => {
                 const selected = fuelType === f;
@@ -359,7 +371,10 @@ export default function AddVehicle() {
                     rippleColor="rgba(55, 194, 223, 0.15)"
                   >
                     <View style={styles.fuelChipInner}>
-                      <Text style={[styles.fuelChipText, selected && styles.fuelChipTextSelected]}>
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.fuelChipText, selected && styles.fuelChipTextSelected]}
+                      >
                         {f}
                       </Text>
                     </View>
@@ -384,6 +399,7 @@ export default function AddVehicle() {
               onSelect={(b) => {
                 setBrand(b);
                 setModel('');   // the model list depends on the brand
+                setYear('');    // and the year list depends on the model
               }}
             />
           </View>
@@ -401,28 +417,41 @@ export default function AddVehicle() {
               disabled={!brand}
               searchable
               details={modelYears}
-              onSelect={setModel}
+              onSelect={handleModelChange}
             />
           </View>
 
-          {/* Year */}
+          {/* Year: pick from the years the chosen model was made; typed only if the model has no list */}
           <View style={styles.fieldBlock}>
             <Text style={styles.fieldLabel}>
               Model Year <Text style={styles.requiredAsterisk}>*</Text>
             </Text>
-            <View style={[styles.inputContainer, { width: '48%' }]}>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY"
-                placeholderTextColor={COLORS.textMuted}
-                value={year}
-                onChangeText={setYear}
-                keyboardType="number-pad"
-                maxLength={4}
-                selectionColor={COLORS.primary}
-              />
-            </View>
-            {yearHint ? <Text style={styles.yearHint}>{yearHint}</Text> : null}
+            {yearOptions || !model ? (
+              <View style={{ width: '48%' }}>
+                <SelectField
+                  value={year}
+                  options={yearOptions || []}
+                  title={model ? `Select ${model} year` : 'Select year'}
+                  placeholder={model ? 'Select a year' : 'Select a model first'}
+                  disabled={!yearOptions}
+                  searchable
+                  onSelect={setYear}
+                />
+              </View>
+            ) : (
+              <View style={[styles.inputContainer, { width: '48%' }]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="YYYY"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={year}
+                  onChangeText={setYear}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  selectionColor={COLORS.primary}
+                />
+              </View>
+            )}
           </View>
 
         </ScrollView>
@@ -540,6 +569,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   requiredAsterisk: { color: COLORS.primary },
+  optionalTag: { color: COLORS.textMuted, fontWeight: '400' },
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -583,22 +613,18 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 15,
   },
-  yearHint: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginTop: SPACING.sm,
-  },
   fuelTypeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    rowGap: SPACING.sm,
   },
   fuelChip: {
-    flex: 1,
+    width: '32%',   // three chips per row
     backgroundColor: COLORS.surface,
     borderRadius: RADII.input,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginHorizontal: 3,
     overflow: 'hidden',
   },
   fuelChipSelected: {
@@ -606,7 +632,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryMuted,
   },
   fuelChipInner: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: 4,
     alignItems: 'center',
   },
   fuelChipText: {

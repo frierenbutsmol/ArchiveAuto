@@ -28,7 +28,6 @@ const FALLBACK_STATS = {
   verifiedRepairs: '0',
   lastService: '—',
   mileage: '—',
-  plate: '—',
 };
 
 const FALLBACK_HISTORY = [];
@@ -123,13 +122,6 @@ export default function VehicleDetails() {
             <Text style={styles.statValue}>{stats.mileage}</Text>
           </View>
 
-          <View style={styles.statCard}>
-            <View style={styles.statLabelRow}>
-              <MaterialIcons name="directions-car" size={16} color={COLORS.textMuted} />
-              <Text style={styles.statLabel}>Plate</Text>
-            </View>
-            <Text style={styles.statValue}>{stats.plate}</Text>
-          </View>
         </View>
 
         {/* Recent history */}

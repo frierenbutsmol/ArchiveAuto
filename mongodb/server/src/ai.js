@@ -128,7 +128,7 @@ function buildSystemInstruction(ctx = {}, now = new Date()) {
   const odometer = typeof v.current_mileage === 'number' ? v.current_mileage : null;
   const header = [
     `Vehicle: ${[v.year, v.make, v.series].filter(Boolean).join(' ') || 'Unknown'}${v.nickname ? ` ("${clean(v.nickname)}")` : ''}`,
-    `Type: ${val(v.vehicle_type)} | Fuel: ${val(v.fuel_type)} | Plate: ${val(v.plate_number)}`,
+    `Type: ${val(v.vehicle_type)} | Fuel: ${val(v.fuel_type)}`,
     `Current odometer: ${km(v.current_mileage)}`,
   ].join('\n');
 
@@ -254,4 +254,4 @@ async function askGemini(systemInstruction, message, history = []) {
   return text;
 }
 
-module.exports = { buildSystemInstruction, buildContents, askGemini, todayInfo };
+module.exports = { buildSystemInstruction, buildContents, askGemini, todayInfo }; 
