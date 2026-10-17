@@ -413,8 +413,11 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  // flexGrow (not flex: 1): flex: 1 gives the wrapper a zero basis, so buttons
+  // without a fixed height (like Add Record / Cancel) collapsed to nothing on Android.
   rippleFill: {
-    flex: 1,
+    flexGrow: 1,
+    alignSelf: 'stretch',
   },
   topBar: {
     height: TOP_BAR_HEIGHT,
