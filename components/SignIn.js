@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   Image,
@@ -11,13 +10,14 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
-  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 import { routeForRole } from '../lib/roles';
 import { emailError } from '../lib/validators';
+import FormMessage from './FormMessage';
 
 export default function SignIn({ navigation, route }) {
   const [email, setEmail] = useState(route?.params?.verifyEmail || '');
@@ -28,6 +28,28 @@ export default function SignIn({ navigation, route }) {
   const [emailTouched, setEmailTouched] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // Problems from the server show inside the form (no pop-ups): wrong password,
+  // unverified email, no connection.
+  const [formError, setFormError] = useState('');
+  const [credentialsWrong, setCredentialsWrong] = useState(false);
+  const verifyParam = route?.params?.verifyEmail;
+  const mailFailed = route?.params?.emailSent === false;
+  const [notice, setNotice] = useState(
+    verifyParam
+      ? mailFailed
+        ? {
+            type: 'error',
+            canResend: true,
+            text: `Your account was created, but we could not send the email to ${verifyParam}. Tap "Resend email" to try again.`,
+          }
+        : {
+            type: 'success',
+            canResend: false,
+            text: `We sent a verification link to ${verifyParam}. Open it, then log in.`,
+          }
+      : null
+  );
+
   // Errors appear after the field is left (or after the first tap on LogIn),
   // then update live while the user keeps typing.
   const emailMsg = emailError(email);
@@ -36,6 +58,9 @@ export default function SignIn({ navigation, route }) {
 
   const handleSignIn = async () => {
     setSubmitted(true);
+    setFormError('');
+    setCredentialsWrong(false);
+    setNotice(null);
     if (emailMsg || !password) return;   // inline messages explain what is wrong
 
     setLoading(true);
@@ -49,22 +74,11 @@ export default function SignIn({ navigation, route }) {
 
     if (error) {
       if (error.code === 'email_not_verified') {
-        Alert.alert('Verify your email', error.message, [
-          { text: 'OK', style: 'cancel' },
-          {
-            text: 'Resend email',
-            onPress: async () => {
-              const r = await api.auth.resendVerification(email.trim());
-              Alert.alert(
-                r.error ? 'Could not send' : 'Email sent',
-                r.error ? r.error.message : 'Check your inbox (and spam folder) for the new link.'
-              );
-            },
-          },
-        ]);
+        setNotice({ type: 'info', canResend: true, text: error.message });
         return;
       }
-      Alert.alert('Login Failed', error.message);
+      if (error.status === 401) setCredentialsWrong(true);   // both fields turn red
+      setFormError(error.message);
       return;
     }
 
@@ -73,6 +87,15 @@ export default function SignIn({ navigation, route }) {
       index: 0,
       routes: [{ name: routeForRole(data?.user?.role) }],
     });
+  };
+
+  const resendVerification = async () => {
+    const r = await api.auth.resendVerification(email.trim());
+    setNotice(
+      r.error
+        ? { type: 'error', canResend: true, text: r.error.message }
+        : { type: 'success', canResend: false, text: 'Email sent. Check your inbox (and spam folder) for the new link.' }
+    );
   };
 
   return (
@@ -104,7 +127,7 @@ export default function SignIn({ navigation, route }) {
           {/* Form */}
           <View style={styles.form}>
             <Text style={styles.label}>Email address</Text>
-            <View style={[styles.inputRow, showEmailError && styles.inputRowError]}>
+            <View style={[styles.inputRow, (showEmailError || credentialsWrong) && styles.inputRowError]}>
               <Ionicons
                 name="mail-outline"
                 size={20}
@@ -116,7 +139,11 @@ export default function SignIn({ navigation, route }) {
                 placeholder="you@example.com"
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setFormError('');
+                  setCredentialsWrong(false);
+                }}
                 onBlur={() => setEmailTouched(true)}
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -129,7 +156,7 @@ export default function SignIn({ navigation, route }) {
               Password
             </Text>
 
-            <View style={[styles.inputRow, showPasswordError && styles.inputRowError]}>
+            <View style={[styles.inputRow, (showPasswordError || credentialsWrong) && styles.inputRowError]}>
               <Ionicons
                 name="lock-closed-outline"
                 size={20}
@@ -142,7 +169,11 @@ export default function SignIn({ navigation, route }) {
                 placeholder="••••••••"
                 placeholderTextColor={COLORS.textMuted}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => {
+                  setPassword(v);
+                  setFormError('');
+                  setCredentialsWrong(false);
+                }}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
@@ -158,6 +189,18 @@ export default function SignIn({ navigation, route }) {
               </TouchableOpacity>
             </View>
             {showPasswordError && <Text style={styles.errorText}>Password is required.</Text>}
+            {!!formError && (
+              <FormMessage type="error" text={formError} style={{ marginTop: SPACING.md }} />
+            )}
+            {notice && (
+              <FormMessage
+                type={notice.type}
+                text={notice.text}
+                actionLabel={notice.canResend ? 'Resend email' : undefined}
+                onAction={notice.canResend ? resendVerification : undefined}
+                style={{ marginTop: SPACING.md }}
+              />
+            )}
 
             <View style={styles.optionsRow}>
               <TouchableOpacity

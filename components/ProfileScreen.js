@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   Image,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
@@ -73,6 +73,18 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
+    {
+      id: 'garage',
+      icon: 'car-sport-outline',
+      label: 'My Garage',
+      onPress: () => navigation.navigate('Garage'),
+    },
+    {
+      id: 'notifications',
+      icon: 'notifications-outline',
+      label: 'Notifications',
+      onPress: () => navigation.navigate('Notification'),
+    },
     {
       id: 'settings',
       icon: 'settings-outline',

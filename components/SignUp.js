@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +18,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 import { emailError } from '../lib/validators';
 import { routeForRole } from '../lib/roles';
+import FormMessage from './FormMessage';
 
 export default function SignUp() {
   const navigation = useNavigation();
@@ -27,8 +27,15 @@ export default function SignUp() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
+  const [emailTaken, setEmailTaken] = useState(false);   // the server says this email already has an account
+  const [submitted, setSubmitted] = useState(false);     // after the first tap on Create Account, every problem shows
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const [formError, setFormError] = useState('');
   const emailMsg = emailError(email);
-  const showEmailError = emailTouched && !!emailMsg;
+  const showEmailError = emailTaken || ((emailTouched || submitted) && !!emailMsg);
+  const shownEmailMsg = emailTaken
+    ? 'This email is already registered. Try logging in instead.'
+    : emailMsg;
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -36,6 +43,7 @@ export default function SignUp() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);   // Terms and Conditions checkbox
 
   // Password requirements
   const passwordRequirements = [
@@ -57,73 +65,24 @@ export default function SignUp() {
     },
   ];
 
+  // Same idea as the login screen: whatever is wrong turns that field red, with a short message.
+  const passwordValid = passwordRequirements.every((requirement) => requirement.valid);
+  const confirmMsg = !confirmPassword
+    ? 'Please confirm your password.'
+    : confirmPassword !== password
+      ? 'Passwords do not match.'
+      : '';
+  const showNameError = submitted && !displayName.trim();
+  const showPasswordError = submitted && !passwordValid;
+  const showConfirmError = (confirmTouched || submitted) && !!confirmMsg;
+  const showTermsError = submitted && !agreed;
+
   const handleCreateAccount = async () => {
-    // Check display name
-    if (!displayName.trim()) {
-      Alert.alert(
-        'Missing Name',
-        'Please enter your display name.'
-      );
-      return;
-    }
+    setSubmitted(true);
+    setFormError('');
 
-    // Check email
-    if (emailMsg) {
-      setEmailTouched(true);
-      Alert.alert(email.trim() ? 'Invalid Email' : 'Missing Email', emailMsg);
-      return;
-    }
-
-    // Check password
-    if (!password) {
-      Alert.alert(
-        'Missing Password',
-        'Please enter a password.'
-      );
-      return;
-    }
-
-    // Check password requirements
-    if (password.length < 8) {
-      Alert.alert(
-        'Invalid Password',
-        'Your password must be at least 8 characters long.'
-      );
-      return;
-    }
-
-    if (!/[a-z]/.test(password)) {
-      Alert.alert(
-        'Invalid Password',
-        'Your password must contain at least one lowercase letter.'
-      );
-      return;
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      Alert.alert(
-        'Invalid Password',
-        'Your password must contain at least one uppercase letter.'
-      );
-      return;
-    }
-
-    if (!/[0-9]/.test(password)) {
-      Alert.alert(
-        'Invalid Password',
-        'Your password must contain at least one number.'
-      );
-      return;
-    }
-
-    // Check matching passwords
-    if (password !== confirmPassword) {
-      Alert.alert(
-        'Passwords Do Not Match',
-        'Please make sure both passwords are the same.'
-      );
-      return;
-    }
+    // Nothing is sent until every field is right; the red fields show what to fix.
+    if (!displayName.trim() || emailMsg || !passwordValid || confirmMsg || !agreed) return;
 
     setLoading(true);
 
@@ -138,39 +97,28 @@ export default function SignUp() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Sign Up Failed', error.message);
+      if (error.status === 409) setEmailTaken(true);   // turns the email field red
+      else setFormError(error.message);
       return;
     }
 
-    // New accounts must verify their email first, so send them to Log In instead of the app.
+    // New accounts must verify their email first, so send them to Log In (which explains what to do).
     if (data?.needsVerification) {
-      Alert.alert(
-        'Verify your email',
-        data.emailSent
-          ? `We sent a verification link to ${email.trim()}. Open it, then log in.`
-          : `Your account was created, but we could not send the email to ${email.trim()}. On the login screen, try to log in and tap "Resend email".`,
-        [{
-          text: 'OK',
-          onPress: () => navigation.reset({
-            index: 0,
-            routes: [{ name: 'SignIn', params: { verifyEmail: email.trim() } }],
-          }),
+      navigation.reset({
+        index: 0,
+        routes: [{
+          name: 'SignIn',
+          params: { verifyEmail: email.trim(), emailSent: !!data.emailSent },
         }],
-        { cancelable: false }
-      );
+      });
       return;
     }
 
     if (!data?.user) {
-      Alert.alert(
-        'Sign Up Failed',
-        'The account was created, but the user information could not be found.'
-      );
+      setFormError('The account was created, but the user information could not be found.');
       return;
     }
 
-    // The server signs the new user in right away (no email confirmation step).
-    // Go straight to the app
     // Owners and mechanics each land on their own dashboard.
     navigation.reset({
       index: 0,
@@ -293,7 +241,7 @@ export default function SignUp() {
               Name
             </Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showNameError && styles.inputRowError]}>
               <Ionicons
                 name="person-outline"
                 size={20}
@@ -311,6 +259,8 @@ export default function SignUp() {
                 autoCorrect={false}
               />
             </View>
+
+            {showNameError && <Text style={styles.errorText}>Name is required.</Text>}
 
             {/* Email */}
             <Text
@@ -335,14 +285,17 @@ export default function SignUp() {
                 placeholder="you@example.com"
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setEmailTaken(false);
+                }}
                 onBlur={() => setEmailTouched(true)}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
-            {showEmailError && <Text style={styles.errorText}>{emailMsg}</Text>}
+            {showEmailError && <Text style={styles.errorText}>{shownEmailMsg}</Text>}
 
             {/* Password */}
             <Text
@@ -354,7 +307,7 @@ export default function SignUp() {
               Password
             </Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showPasswordError && styles.inputRowError]}>
               <Ionicons
                 name="lock-closed-outline"
                 size={20}
@@ -398,6 +351,12 @@ export default function SignUp() {
               </TouchableOpacity>
             </View>
 
+            {showPasswordError && (
+              <Text style={styles.errorText}>
+                {password ? 'Your password must meet every requirement below.' : 'Password is required.'}
+              </Text>
+            )}
+
             {/* Password Requirements */}
             <View style={styles.requirementsBox}>
               {passwordRequirements.map(
@@ -416,7 +375,9 @@ export default function SignUp() {
                       color={
                         requirement.valid
                           ? COLORS.primary
-                          : COLORS.textMuted
+                          : showPasswordError
+                            ? COLORS.danger
+                            : COLORS.textMuted
                       }
                     />
 
@@ -425,6 +386,9 @@ export default function SignUp() {
                         styles.requirementText,
                         requirement.valid &&
                           styles.requirementTextValid,
+                        !requirement.valid &&
+                          showPasswordError &&
+                          styles.requirementTextError,
                       ]}
                     >
                       {requirement.label}
@@ -444,7 +408,7 @@ export default function SignUp() {
               Confirm Password
             </Text>
 
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, showConfirmError && styles.inputRowError]}>
               <Ionicons
                 name="shield-checkmark-outline"
                 size={20}
@@ -458,6 +422,7 @@ export default function SignUp() {
                 placeholderTextColor={COLORS.textMuted}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onBlur={() => setConfirmTouched(true)}
                 secureTextEntry={
                   !showConfirmPassword
                 }
@@ -489,6 +454,43 @@ export default function SignUp() {
                 />
               </TouchableOpacity>
             </View>
+
+            {showConfirmError && <Text style={styles.errorText}>{confirmMsg}</Text>}
+
+            {/* Terms and Conditions: must be ticked to sign up */}
+            <View style={styles.termsRow}>
+              <TouchableOpacity
+                onPress={() => setAgreed((v) => !v)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreed }}
+                accessibilityLabel="Agree to the Terms and Conditions"
+              >
+                <View style={[styles.checkbox, agreed && styles.checkboxChecked, showTermsError && styles.checkboxError]}>
+                  {agreed && <Ionicons name="checkmark" size={15} color={COLORS.textInverse} />}
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I have read and agree to the{' '}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate('Info', { page: 'terms' })}
+                >
+                  Terms and Conditions
+                </Text>
+              </Text>
+            </View>
+
+            {showTermsError && (
+              <Text style={styles.errorText}>
+                You must agree to the Terms and Conditions to sign up.
+              </Text>
+            )}
+
+            {!!formError && (
+              <FormMessage type="error" text={formError} style={{ marginTop: SPACING.lg }} />
+            )}
 
             {/* Create Account */}
             <TouchableOpacity
@@ -717,6 +719,48 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xxl,
+  },
+
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.textMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  checkboxError: {
+    borderColor: COLORS.danger,
+  },
+
+  requirementTextError: {
+    color: COLORS.danger,
+  },
+
+  termsText: {
+    flex: 1,
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  termsLink: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+
   createButton: {
     width: '100%',
     height: 50,
@@ -724,7 +768,7 @@ const styles = StyleSheet.create({
     borderRadius: RADII.button,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: SPACING.xxxl,
+    marginTop: SPACING.xl,
     shadowColor: COLORS.primary,
     shadowOffset: {
       width: 0,

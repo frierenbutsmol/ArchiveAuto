@@ -74,7 +74,7 @@ export default function ShareVehicle() {
     ]);
 
   return (
-    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader title="Share with mechanic" subtitle={vehicleId ? title : 'Choose a vehicle'} onBack={() => navigation.goBack()} />
 

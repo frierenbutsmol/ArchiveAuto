@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
@@ -58,7 +58,6 @@ export default function SettingsScreen() {
     { id: 'faq', label: 'Help & FAQ' },
     { id: 'proof', label: 'Photo Proof Policy & Verification Guidelines' },
     { id: 'privacy', label: 'Privacy Policy' },
-    { id: 'terms', label: 'Terms of Service' },
     { id: 'about', label: 'About ArchiveAuto' },
   ];
 

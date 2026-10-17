@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   useFocusEffect,
@@ -24,10 +24,13 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api, sortDesc } from '../lib/api';
+import { useBottomInset } from '../lib/useBottomInset';
+import DeleteButton from './DeleteButton';
 
 
 export default function MaintenanceList({ navigation }) {
   const { useMetric } = useSettings();
+  const bottomInset = useBottomInset();
   const route = useRoute();
 
   const [records, setRecords] = useState([]);
@@ -588,6 +591,16 @@ export default function MaintenanceList({ navigation }) {
                     {item.cost}
                   </Text>
 
+                  <DeleteButton
+                    resource="maintenance_records"
+                    id={item.id}
+                    name={item.title}
+                    onDeleted={(id) =>
+                      setRecords((prev) => prev.filter((r) => r.id !== id))
+                    }
+                    style={{ marginLeft: 10 }}
+                  />
+
                 </View>
 
 
@@ -665,7 +678,7 @@ export default function MaintenanceList({ navigation }) {
       {!loading && records.length > 0 && (
         <Touchable
           onPress={handleAddMaintenance}
-          style={styles.fab}
+          style={[styles.fab, { bottom: 24 + bottomInset }]}
         >
 
           <MaterialIcons

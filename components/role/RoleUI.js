@@ -1,7 +1,7 @@
 // Small shared pieces for the mechanic, admin and sharing screens,
 // built from the same theme tokens as the rest of the app.
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../../constants/theme';
 import { ROLE_LABELS } from '../../lib/roles';
@@ -84,12 +84,12 @@ export function ErrorBanner({ message, onRetry }) {
 }
 
 // Same look as the owner tabs in MainTabs.js, so every role feels like one app.
-export function roleTabOptions(icons) {
+export function roleTabOptions(icons, bottomInset = 0) {
   return ({ route }) => ({
     headerShown: false,
     tabBarShowLabel: true,
     tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-    tabBarStyle: ui.tabBar,
+    tabBarStyle: [ui.tabBar, { height: 68 + bottomInset, paddingBottom: 8 + bottomInset }],
     tabBarActiveTintColor: COLORS.primary,
     tabBarInactiveTintColor: COLORS.textMuted,
     tabBarIcon: ({ color, focused }) => {
@@ -164,6 +164,6 @@ export const ui = StyleSheet.create({
   statLabel: { color: COLORS.textMuted, fontSize: 12, marginTop: 4 },
   tabBar: {
     backgroundColor: COLORS.surface, borderTopColor: COLORS.border, borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 84 : 68, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    paddingTop: 8,
   },
 });

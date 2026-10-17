@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MechanicVehicles from './MechanicVehicles';
 import RoleProfile from './RoleProfile';
 import { roleTabOptions } from './RoleUI';
+import { useBottomInset } from '../../lib/useBottomInset';
 
 const Tab = createBottomTabNavigator();
 
@@ -13,8 +14,9 @@ const ICONS = {
 
 // Mechanic dashboard: only the vehicles owners have shared with this mechanic.
 export default function MechanicTabs() {
+  const bottomInset = useBottomInset();   // keeps the bar clear of the phone's Back/Home buttons
   return (
-    <Tab.Navigator initialRouteName="Vehicles" screenOptions={roleTabOptions(ICONS)}>
+    <Tab.Navigator initialRouteName="Vehicles" screenOptions={roleTabOptions(ICONS, bottomInset)}>
       <Tab.Screen name="Vehicles" component={MechanicVehicles} />
       <Tab.Screen name="Profile" component={RoleProfile} />
     </Tab.Navigator>

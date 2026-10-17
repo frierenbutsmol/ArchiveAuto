@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import SelectField from './SelectField';
+import { OTHER, withCurrent } from '../constants/vehicleCatalog';
+import { brandChoices, modelChoices } from '../lib/catalogMerge';
 
 const VEHICLE_TYPES = [
   { id: 'car',        label: 'Car',        icon: 'car'           },
@@ -101,6 +104,51 @@ export default function AddVehicle() {
       : ''
   );
   const [saving, setSaving] = useState(false);
+
+  // Choosing a different vehicle type changes the brand list, so start brand/model over.
+  const handleTypeChange = (typeId) => {
+    if (typeId === vehicleType) return;
+    setVehicleType(typeId);
+    setBrand('');
+    setModel('');
+  };
+
+  // Brands and models come from the database catalog (1995-2025, /catalog/makes and /catalog/models),
+  // merged with the short built-in lists in constants/vehicleCatalog.js. If the catalog is empty or
+  // cannot be reached, only the built-in lists are used, so the form always works.
+  const [dbBrands, setDbBrands] = useState(null);
+  const [dbModels, setDbModels] = useState(null);   // [{ model, year_from, year_to }] for the chosen brand
+
+  useEffect(() => {
+    if (!vehicleType) { setDbBrands(null); return undefined; }
+    let cancelled = false;
+    api.catalog.makes(vehicleType).then(({ data }) => {
+      if (!cancelled) setDbBrands(Array.isArray(data) && data.length ? data : null);
+    });
+    return () => { cancelled = true; };
+  }, [vehicleType]);
+
+  useEffect(() => {
+    if (!vehicleType || !brand || brand === OTHER) { setDbModels(null); return undefined; }
+    let cancelled = false;
+    api.catalog.models(vehicleType, brand).then(({ data }) => {
+      if (!cancelled) setDbModels(Array.isArray(data) && data.length ? data : null);
+    });
+    return () => { cancelled = true; };
+  }, [vehicleType, brand]);
+
+  // A value already saved on this vehicle stays selectable when editing.
+  const brandOptions = withCurrent(brandChoices(vehicleType, dbBrands), brand);
+  const modelOptions = withCurrent(modelChoices(vehicleType, brand, dbModels), model);
+  const modelYears = Object.fromEntries((dbModels || []).map((m) => [m.model, `${m.year_from}\u2013${m.year_to}`]));
+
+  // Gentle hint (never blocks saving) when the year is outside the years listed for the model.
+  const yearNum = /^\d{4}$/.test(year) ? Number(year) : null;
+  const pickedModel = (dbModels || []).find((m) => m.model === model);
+  const yearHint =
+    pickedModel && yearNum !== null && (yearNum < pickedModel.year_from || yearNum > pickedModel.year_to)
+      ? `${pickedModel.model} is listed for ${pickedModel.year_from}\u2013${pickedModel.year_to}. You can still save ${yearNum}.`
+      : null;
 
   const canSave =
     vehicleType !== '' &&
@@ -229,7 +277,7 @@ export default function AddVehicle() {
                   <Touchable
                     key={type.id}
                     style={[styles.typeTile, selected && styles.typeTileSelected]}
-                    onPress={() => setVehicleType(type.id)}
+                    onPress={() => handleTypeChange(type.id)}
                     rippleColor="rgba(55, 194, 223, 0.15)"
                   >
                     <View style={styles.typeTileInner}>
@@ -321,38 +369,40 @@ export default function AddVehicle() {
             </View>
           </View>
 
-          {/* Make / Brand */}
+          {/* Make / Brand: pick from the list */}
           <View style={styles.fieldBlock}>
             <Text style={styles.fieldLabel}>
               Make / Brand <Text style={styles.requiredAsterisk}>*</Text>
             </Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Toyota, Honda, Ford"
-                placeholderTextColor={COLORS.textMuted}
-                value={brand}
-                onChangeText={setBrand}
-                selectionColor={COLORS.primary}
-              />
-            </View>
+            <SelectField
+              value={brand}
+              options={brandOptions}
+              title="Select brand"
+              placeholder={vehicleType ? 'Select a brand' : 'Choose a vehicle type first'}
+              disabled={!vehicleType}
+              searchable
+              onSelect={(b) => {
+                setBrand(b);
+                setModel('');   // the model list depends on the brand
+              }}
+            />
           </View>
 
-          {/* Model / Series */}
+          {/* Model / Series: pick from the list for that brand */}
           <View style={styles.fieldBlock}>
             <Text style={styles.fieldLabel}>
               Model / Series <Text style={styles.requiredAsterisk}>*</Text>
             </Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Hiace, Vios, Ranger"
-                placeholderTextColor={COLORS.textMuted}
-                value={model}
-                onChangeText={setModel}
-                selectionColor={COLORS.primary}
-              />
-            </View>
+            <SelectField
+              value={model}
+              options={modelOptions}
+              title={brand ? `Select ${brand} model` : 'Select model'}
+              placeholder={brand ? 'Select a model' : 'Select a brand first'}
+              disabled={!brand}
+              searchable
+              details={modelYears}
+              onSelect={setModel}
+            />
           </View>
 
           {/* Year */}
@@ -372,6 +422,7 @@ export default function AddVehicle() {
                 selectionColor={COLORS.primary}
               />
             </View>
+            {yearHint ? <Text style={styles.yearHint}>{yearHint}</Text> : null}
           </View>
 
         </ScrollView>
@@ -531,6 +582,11 @@ const styles = StyleSheet.create({
   input: {
     color: COLORS.textPrimary,
     fontSize: 15,
+  },
+  yearHint: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: SPACING.sm,
   },
   fuelTypeRow: {
     flexDirection: 'row',

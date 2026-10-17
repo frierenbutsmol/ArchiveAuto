@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   Image,
@@ -14,10 +13,12 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 import { emailError } from '../lib/validators';
+import FormMessage from './FormMessage';
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
@@ -53,15 +54,15 @@ export default function ResetPassword({ navigation }) {
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
   const emailMsg = emailError(email);
-  const showEmailError = emailTouched && !!emailMsg;
+  const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState('');
+  const showEmailError = (emailTouched || submitted) && !!emailMsg;
   const [loading, setLoading] = useState(false);
 
   const handleSendResetLink = async () => {
-    if (emailMsg) {
-      setEmailTouched(true);
-      Alert.alert(email.trim() ? 'Invalid Email' : 'Email Required', emailMsg);
-      return;
-    }
+    setSubmitted(true);
+    setFormError('');
+    if (emailMsg) return;   // the email field turns red with a message
 
     setLoading(true);
 
@@ -70,7 +71,7 @@ export default function ResetPassword({ navigation }) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Reset Password Failed', error.message);
+      setFormError(error.message);
       return;
     }
 
@@ -151,7 +152,10 @@ export default function ResetPassword({ navigation }) {
                 placeholder="you@example.com"
                 placeholderTextColor={COLORS.textMuted}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setFormError('');
+                }}
                 onBlur={() => setEmailTouched(true)}
                 autoCapitalize="none"
                 keyboardType="email-address"
@@ -159,6 +163,9 @@ export default function ResetPassword({ navigation }) {
               />
             </View>
             {showEmailError && <Text style={styles.errorText}>{emailMsg}</Text>}
+            {!!formError && (
+              <FormMessage type="error" text={formError} style={{ marginTop: 12 }} />
+            )}
 
             <Text style={styles.infoText}>
               We'll send a link to your email that will let you create a new password.

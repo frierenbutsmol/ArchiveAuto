@@ -12,6 +12,7 @@ const { buildSystemInstruction, askGemini } = require('./ai');
 const { sendResetEmail, sendVerifyEmail, resetLinks } = require('./mailer');
 const { makeAuth } = require('./rbac');
 const { registerRoleRoutes } = require('./roleRoutes');
+const { registerCatalogRoutes } = require('./catalogRoutes');
 const { applySecurity } = require('./security');
 const { makeAudit, registerAuditRoutes } = require('./audit');
 const { validate, schemas, isId } = require('./validate');
@@ -349,6 +350,7 @@ function crud(path, Model, { child = false, schema } = {}) {
 // Sharing, mechanic and admin routes (roles). Registered before the generic CRUD routes.
 registerRoleRoutes(app, { M, auth, wrap, audit });
 registerAuditRoutes(app, { M, auth, wrap });
+registerCatalogRoutes(app, { M, auth, wrap });   // read-only make/model suggestions
 
 crud('/vehicles', M.Vehicle, { schema: schemas.vehicle });
 crud('/maintenance_records', M.MaintenanceRecord, { child: true, schema: schemas.maintenance });

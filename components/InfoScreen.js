@@ -16,10 +16,10 @@ const PAGES = {
   faq: {
     title: 'Help & FAQ',
     blocks: [
-      { h: 'How do I add a vehicle?', p: 'Open the Garage tab and tap the + button. Enter the make, model and current odometer reading.' },
+      { h: 'How do I add a vehicle?', p: 'Tap the swap icon at the top left of Home (or "My Garage" in Profile) to open your Garage, then tap the + button. Choose the vehicle type, brand and model from the lists.' },
       { h: 'How do alerts work?', p: 'Alerts are calculated from your own records. A service alert appears when the last logged service of a type (oil change, tires, brakes, fluids, battery) is within 500 km of its interval, or past it. A document alert appears 30 days before a document\'s expiry date, and after it expires.' },
       { h: 'What are the service intervals?', p: 'Oil change 5,000 km, brakes 30,000 km, tires and fluids 40,000 km, battery 50,000 km. Alerts only appear for service types you have logged at least once.' },
-      { h: 'Why is an alert not showing?', p: 'Check that the alert type is switched on in Settings, that the record has a mileage (services) or an expiry date (documents), and pull down on the Alerts screen to refresh.' },
+      { h: 'Why is an alert not showing?', p: 'Check that the alert type is switched on in Settings, that the record has a mileage (services) or an expiry date (documents), and pull down on the Notifications screen (the bell on Home) to refresh.' },
       { h: 'Can I use miles?', p: 'Yes. Turn off "Use kilometres" in Settings. Values are stored in km and converted for display, so a mileage may differ by 1 mile after conversion.' },
       { h: 'I forgot my password', p: 'On the Sign In screen tap "Forgot password" and we will email you a reset link. Open the link on the phone that has the app installed.' },
     ],
@@ -39,12 +39,13 @@ const PAGES = {
       { h: 'What we store', p: 'Your email, display name, and the vehicles, maintenance, repair, parts and document records you add.' },
       { h: 'How we use it', p: 'To show your records, calculate reminders, send password-reset emails, and answer questions in the AI assistant. We do not sell your data.' },
       { h: 'AI assistant', p: 'When you ask the assistant a question, your message and, in Vehicle Aware mode, that vehicle\'s records are sent to Google\'s Gemini service to generate a reply.' },
-      { h: 'Your choices', p: `You can edit or delete any record in the app. To delete your account and data, email ${SUPPORT_EMAIL}.` },
+      { h: 'Your choices', p: `You can delete any vehicle or record in the app. To delete your account and data, email ${SUPPORT_EMAIL}.` },
     ],
   },
   terms: {
-    title: 'Terms of Service',
+    title: 'Terms and Conditions',
     blocks: [
+      { h: 'Acceptance', p: 'By creating an ArchiveAuto account you confirm that you have read and agree to these terms.' },
       { h: 'Using ArchiveAuto', p: 'ArchiveAuto helps you keep vehicle records and reminders. You are responsible for the accuracy of what you enter.' },
       { h: 'Reminders are estimates', p: 'Service and expiry alerts are based on general intervals and the dates you provide. Follow your manufacturer\'s schedule and official renewal dates.' },
       { h: 'AI answers', p: 'The assistant can make mistakes. Do not rely on it for safety-critical decisions; consult a qualified mechanic.' },

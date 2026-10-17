@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -11,12 +10,14 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api, sortDesc } from '../lib/api';
+import DeleteButton from './DeleteButton';
 
 // Gives touchables a real Material ripple on Android; falls back to
 // opacity dimming on iOS.
@@ -240,6 +241,16 @@ export default function PartsReplacement({ navigation }) {
                     </View>
 
                     <Text style={styles.partCost}>{formatCost(item.cost)}</Text>
+
+                    <DeleteButton
+                      resource="parts_replacements"
+                      id={item.id}
+                      name={item.part_name}
+                      onDeleted={(id) =>
+                        setParts((prev) => prev.filter((p) => p.id !== id))
+                      }
+                      style={{ marginLeft: 10 }}
+                    />
                   </View>
 
                   <View style={styles.metaRow}>

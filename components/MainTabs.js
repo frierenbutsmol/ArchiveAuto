@@ -1,36 +1,35 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './HomeScreen';
-import GarageScreen from './GarageScreen';
 import AIChat from './AIChat';
-import Notification from './Notification';
 import ProfileScreen from './ProfileScreen';
 import { COLORS } from '../constants/theme';
+import { useBottomInset } from '../lib/useBottomInset';
 
 const Tab = createBottomTabNavigator();
 
-// Matches the icon assignments shown in the Garage-screen mockups' bottom
-// nav: home / directions_car / auto_awesome / notifications / person_outline.
-// Ionicons' closest match for "auto_awesome" (a sparkle/magic icon, fitting
-// for an AI chat tab) is "sparkles".
+// The three main tabs: Home, AI Chat and Profile.
+// Garage opens from the swap icon on Home (or "My Garage" in Profile), and
+// Notifications opens from the bell on Home (or "Notifications" in Profile).
 const ICON_NAMES = {
-  Garage: { active: 'car', inactive: 'car-outline' },
   Home: { active: 'home', inactive: 'home-outline' },
   Chat: { active: 'sparkles', inactive: 'sparkles-outline' },
-  Alerts: { active: 'notifications', inactive: 'notifications-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 };
 
 export default function MainTabs() {
+  // Lift the bar above the phone's Back/Home buttons (or gesture bar)
+  const bottomInset = useBottomInset();
+
   return (
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { height: 68 + bottomInset, paddingBottom: 8 + bottomInset }],
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarIcon: ({ color, focused }) => (
@@ -48,9 +47,7 @@ export default function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Garage" component={GarageScreen} />
       <Tab.Screen name="Chat" component={AIChat} />
-      <Tab.Screen name="Alerts" component={Notification} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -61,9 +58,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopColor: COLORS.border,
     borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 82 : 68,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },

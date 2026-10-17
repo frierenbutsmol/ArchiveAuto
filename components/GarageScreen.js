@@ -17,6 +17,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
+import DeleteButton from './DeleteButton';
 
 // Same type -> icon mapping as AddVehicle.js (MaterialCommunityIcons, since
 // Ionicons has no motorcycle/van/truck icons).
@@ -138,16 +139,29 @@ export default function GarageScreen({ navigation }) {
       {/* Top bar */}
       <View style={[styles.topBar, { marginTop: statusBarOffset }]}>
         <View style={styles.topBarLeft}>
-          <View style={styles.brandIcon}>
-            <Ionicons name="car" size={18} color={COLORS.primary} />
-          </View>
+          {/* Garage is now opened from Home/Profile, so it needs a way back */}
+          <TouchableOpacity
+            style={styles.brandIcon}
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('MainTabs'))}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
           <View>
             <Text style={styles.brandLabel}>ArchiveAuto</Text>
             <Text style={styles.topBarTitle}>Garage</Text>
           </View>
         </View>
-        <Touchable style={styles.avatarButton} borderless rippleColor="rgba(255,255,255,0.15)">
-          <Ionicons name="person" size={17} color={COLORS.textPrimary} />
+        {/* This button used to do nothing. It now adds a vehicle. */}
+        <Touchable
+          style={styles.avatarButton}
+          onPress={() => navigation.navigate('AddVehicle')}
+          borderless
+          rippleColor="rgba(255,255,255,0.15)"
+        >
+          <Ionicons name="add" size={22} color={COLORS.textPrimary} />
         </Touchable>
       </View>
 
@@ -232,6 +246,15 @@ export default function GarageScreen({ navigation }) {
                       style={{ marginBottom: 10 }}>
                       <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
                     </TouchableOpacity>
+                    {/* Owner: delete this vehicle and everything recorded for it */}
+                    <DeleteButton
+                      resource="vehicles"
+                      id={vehicle.id}
+                      name={vehicle.name}
+                      message="This also deletes all of its maintenance, repair, parts and document records."
+                      onDeleted={loadVehicles}
+                      style={{ marginBottom: 10 }}
+                    />
                     <Ionicons
                       name="chevron-forward"
                       size={20}

@@ -48,7 +48,7 @@ export default function MechanicVehicleDetail() {
   const add = (kind) => navigation.navigate('MechanicAddRecord', { vehicleId: vehicle.id, vehicleName: vehicleName(vehicle), kind });
 
   return (
-    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader
         title={vehicleName(vehicle)}

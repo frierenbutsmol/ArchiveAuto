@@ -61,7 +61,7 @@ export default function MechanicAddRecord() {
   };
 
   return (
-    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader
         title={isRepair ? 'Add Repair' : 'Add Maintenance'}

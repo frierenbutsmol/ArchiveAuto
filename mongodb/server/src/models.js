@@ -150,7 +150,22 @@ const VerifyToken = model('VerifyToken', new Schema({
   expires_at: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
 }, TS));
 
+// vehicle_catalog = read-only reference list of makes/models by year range (cars, motorcycles,
+// vans, trucks, 1995-2025). Filled by `npm run seed-catalog`; used for suggestions in Add Vehicle.
+const VehicleCatalog = model('VehicleCatalog', new Schema({
+  type: { type: String, enum: ['car', 'motorcycle', 'van', 'truck'], required: true },
+  make: { type: String, required: true },
+  model: { type: String, required: true },
+  make_key: { type: String, required: true },     // lowercase letters/digits, for matching
+  model_key: { type: String, required: true },
+  year_from: { type: Number, required: true },
+  year_to: { type: Number, required: true },
+  source: String,                                 // dataset | curated | both
+}, { collection: 'vehicle_catalog', versionKey: false })
+  .index({ type: 1, make_key: 1, model_key: 1, year_from: 1 }, { unique: true }));
+
 module.exports = {
   User, Vehicle, MaintenanceRecord, Repair, PartsReplacement,
   Document: VehicleDocument, ResetToken, VerifyToken, StoredFile, VehicleShare, AuditLog,
+  VehicleCatalog,
 };

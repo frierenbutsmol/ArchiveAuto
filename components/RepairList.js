@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -10,12 +9,14 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api, sortDesc } from '../lib/api';
+import DeleteButton from './DeleteButton';
 
 export default function RepairList({ navigation }) {
   const { useMetric } = useSettings();
@@ -286,6 +287,17 @@ export default function RepairList({ navigation }) {
                   <Text style={styles.costText}>
                     {item.cost}
                   </Text>
+
+                  <DeleteButton
+                    resource="repairs"
+                    id={item.id}
+                    name={item.title}
+                    message="Its attached proof photo, if any, is deleted too."
+                    onDeleted={(id) =>
+                      setRepairs((prev) => prev.filter((r) => r.id !== id))
+                    }
+                    style={{ marginLeft: 10 }}
+                  />
                 </View>
 
                 <Text style={styles.repairTitle}>

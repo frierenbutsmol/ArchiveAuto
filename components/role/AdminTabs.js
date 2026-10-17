@@ -5,6 +5,7 @@ import AdminStats from './AdminStats';
 import AdminAudit from './AdminAudit';
 import RoleProfile from './RoleProfile';
 import { roleTabOptions } from './RoleUI';
+import { useBottomInset } from '../../lib/useBottomInset';
 
 const Tab = createBottomTabNavigator();
 
@@ -18,8 +19,9 @@ const ICONS = {
 // Admin dashboard: accounts and roles, system statistics, and the audit log.
 // Admins never see owners' vehicles or records (the server does not allow it).
 export default function AdminTabs() {
+  const bottomInset = useBottomInset();   // keeps the bar clear of the phone's Back/Home buttons
   return (
-    <Tab.Navigator initialRouteName="Users" screenOptions={roleTabOptions(ICONS)}>
+    <Tab.Navigator initialRouteName="Users" screenOptions={roleTabOptions(ICONS, bottomInset)}>
       <Tab.Screen name="Users" component={AdminUsers} />
       <Tab.Screen name="Stats" component={AdminStats} />
       <Tab.Screen name="Audit" component={AdminAudit} />

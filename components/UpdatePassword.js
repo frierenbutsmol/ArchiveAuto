@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  SafeAreaView,
   KeyboardAvoidingView,
   View,
   Text,
@@ -12,9 +11,11 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import FormMessage from './FormMessage';
 
 const REQUIREMENTS = [
   {
@@ -51,6 +52,10 @@ export default function UpdatePassword({ navigation, route }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);       // after the first tap on Continue, problems show
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const [currentWrong, setCurrentWrong] = useState(false);  // the server said the current password is wrong
+  const [formError, setFormError] = useState('');
 
   const checks = useMemo(
     () =>
@@ -69,14 +74,21 @@ export default function UpdatePassword({ navigation, route }) {
   const sameAsCurrent =
     needsCurrent && password.length > 0 && password === currentPassword;
 
-  const canSubmit =
+  const formValid =
     allMet &&
     passwordsMatch &&
-    (!needsCurrent || (currentPassword.length > 0 && !sameAsCurrent)) &&
-    !loading;
+    (!needsCurrent || (currentPassword.length > 0 && !sameAsCurrent));
+
+  // Same idea as the login screen: a field turns red, with a message, when something is wrong.
+  const showCurrentError = needsCurrent && (currentWrong || (submitted && !currentPassword));
+  const showPasswordError = submitted && (!allMet || sameAsCurrent);
+  const showConfirmError = (submitted || confirmTouched) && !passwordsMatch;
 
   const handleResetPassword = async () => {
-    if (!canSubmit) return;
+    setSubmitted(true);
+    setFormError('');
+    setCurrentWrong(false);
+    if (loading || !formValid) return;   // the red fields show what to fix
 
     setLoading(true);
 
@@ -87,10 +99,8 @@ export default function UpdatePassword({ navigation, route }) {
     setLoading(false);
 
     if (error) {
-      Alert.alert(
-        'Password Update Failed',
-        error.message
-      );
+      if (/current password/i.test(error.message)) setCurrentWrong(true);
+      setFormError(error.message);
       return;
     }
 
@@ -179,7 +189,7 @@ export default function UpdatePassword({ navigation, route }) {
                 Current password
               </Text>
 
-              <View style={styles.inputRow}>
+              <View style={[styles.inputRow, showCurrentError && styles.inputRowError]}>
                 <Ionicons
                   name="key-outline"
                   size={20}
@@ -192,7 +202,11 @@ export default function UpdatePassword({ navigation, route }) {
                   placeholder="••••••••"
                   placeholderTextColor={COLORS.textMuted}
                   value={currentPassword}
-                  onChangeText={setCurrentPassword}
+                  onChangeText={(v) => {
+                    setCurrentPassword(v);
+                    setCurrentWrong(false);
+                    setFormError('');
+                  }}
                   secureTextEntry={!showCurrentPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -208,6 +222,11 @@ export default function UpdatePassword({ navigation, route }) {
                   />
                 </TouchableOpacity>
               </View>
+              {showCurrentError && (
+                <Text style={styles.errorText}>
+                  {currentWrong ? 'Your current password is incorrect.' : 'Enter your current password.'}
+                </Text>
+              )}
             </>
           )}
 
@@ -215,7 +234,7 @@ export default function UpdatePassword({ navigation, route }) {
             New password
           </Text>
 
-          <View style={styles.inputRow}>
+          <View style={[styles.inputRow, showPasswordError && styles.inputRowError]}>
             <Ionicons
               name="lock-closed-outline"
               size={20}
@@ -251,6 +270,16 @@ export default function UpdatePassword({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
+          {showPasswordError && (
+            <Text style={styles.errorText}>
+              {sameAsCurrent
+                ? 'New password must be different from the current one.'
+                : password
+                  ? 'Your new password must meet every requirement below.'
+                  : 'Enter a new password.'}
+            </Text>
+          )}
+
           {/* Requirements */}
           <View style={styles.checklist}>
             {checks.map((c) => (
@@ -261,6 +290,7 @@ export default function UpdatePassword({ navigation, route }) {
                 <View
                   style={[
                     styles.checkDot,
+                    !c.met && submitted && { borderColor: COLORS.danger },
                     c.met && {
                       backgroundColor:
                         COLORS.success,
@@ -283,6 +313,7 @@ export default function UpdatePassword({ navigation, route }) {
                     styles.checkLabel,
                     c.met &&
                       styles.checkLabelMet,
+                    !c.met && submitted && styles.checkLabelError,
                   ]}
                 >
                   {c.label}
@@ -300,7 +331,7 @@ export default function UpdatePassword({ navigation, route }) {
             Confirm new password
           </Text>
 
-          <View style={styles.inputRow}>
+          <View style={[styles.inputRow, showConfirmError && styles.inputRowError]}>
             <Ionicons
               name="shield-checkmark-outline"
               size={20}
@@ -314,6 +345,7 @@ export default function UpdatePassword({ navigation, route }) {
               placeholderTextColor={COLORS.textMuted}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
+              onBlur={() => setConfirmTouched(true)}
               secureTextEntry={!showConfirmPassword}
               autoCapitalize="none"
               autoCorrect={false}
@@ -338,28 +370,25 @@ export default function UpdatePassword({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
-          {sameAsCurrent && (
-            <Text style={styles.mismatchText}>
-              New password must be different from the current one
+          {showConfirmError && (
+            <Text style={styles.errorText}>
+              {confirmPassword ? 'Passwords do not match.' : 'Please confirm your new password.'}
             </Text>
           )}
 
-          {confirmPassword.length > 0 &&
-            !passwordsMatch && (
-              <Text style={styles.mismatchText}>
-                Passwords don&apos;t match
-              </Text>
-            )}
+          {!!formError && (
+            <FormMessage type="error" text={formError} style={{ marginTop: SPACING.lg }} />
+          )}
 
           <TouchableOpacity
             style={[
               styles.ctaButton,
-              !canSubmit &&
+              loading &&
                 styles.ctaButtonDisabled,
             ]}
             onPress={handleResetPassword}
             activeOpacity={0.85}
-            disabled={!canSubmit}
+            disabled={loading}
           >
             <Text style={styles.ctaText}>
               {loading
@@ -462,6 +491,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginBottom: SPACING.sm,
+  },
+
+  inputRowError: {
+    borderColor: COLORS.danger,
+  },
+
+  errorText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    marginTop: 6,
+  },
+
+  checkLabelError: {
+    color: COLORS.danger,
   },
 
   inputRow: {
