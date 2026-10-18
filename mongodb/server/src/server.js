@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const M = require('./models');
 const { buildSystemInstruction, askGemini } = require('./ai');
 const { sendResetEmail, sendVerifyEmail, resetLinks } = require('./mailer');
+const { keysFor, secondsLocked, recordFailure, recordSuccess, waitText } = require('./loginLock');
 const { makeAuth } = require('./rbac');
 const { registerRoleRoutes } = require('./roleRoutes');
 const { registerCatalogRoutes } = require('./catalogRoutes');
@@ -66,11 +67,13 @@ function blockRoleEscalation(req, res, next) {
 
 // Creates a fresh 24-hour verification token and emails the link. Returns false if the email
 // could not be sent (the account still exists; the user can ask for another email).
+const VERIFY_TTL_MINUTES = 30;   // how long the link in the sign-up email stays valid
+
 async function sendVerification(user) {
   const token = crypto.randomBytes(32).toString('hex');
   await M.VerifyToken.deleteMany({ user_id: user._id });
-  await M.VerifyToken.create({ user_id: user._id, token_hash: sha(token), expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000) });
-  try { await sendVerifyEmail(user.email, token); return true; }
+  await M.VerifyToken.create({ user_id: user._id, token_hash: sha(token), expires_at: new Date(Date.now() + VERIFY_TTL_MINUTES * 60 * 1000) });
+  try { await sendVerifyEmail(user.email, token, VERIFY_TTL_MINUTES); return true; }
   catch (e) { console.error('Verification email failed:', e.message); return false; }
 }
 
@@ -97,14 +100,39 @@ app.post('/auth/register', blockRoleEscalation, validate(schemas.register), wrap
   res.status(201).json({ needs_verification: true, email: user.email, email_sent: sent });
 }));
 
+// 429 with the time left, used while a login lockout is active.
+const loginLocked = (res, seconds) => {
+  res.set('Retry-After', String(seconds));
+  return res.status(429).json({
+    error: `Too many failed attempts. Try again in ${waitText(seconds)}.`,
+    code: 'login_locked',
+    retry_after: seconds,
+  });
+};
+
 app.post('/auth/login', validate(schemas.login), wrap(async (req, res) => {
   const { email, password } = req.body;
+  const keys = keysFor(req, email);
+
+  // While locked, even the right password is refused.
+  const wait = await secondsLocked(M, keys);
+  if (wait > 0) {
+    audit(req, 'login_locked', { detail: { email } });
+    return loginLocked(res, wait);
+  }
+
   const user = await M.User.findOne({ email });
   const matches = await bcrypt.compare(password, user?.password_hash || DUMMY_HASH);
   if (!user || !user.password_hash || !matches) {
     audit(req, 'login_failed', { detail: { email } });
-    return res.status(401).json({ error: 'Invalid email or password.' });
+    const left = await recordFailure(M, keys);   // same for unknown emails, so nothing is revealed
+    if (left === 0) return loginLocked(res, (await secondsLocked(M, keys)) || 300);
+    return res.status(401).json({
+      error: `Invalid email or password. ${left} ${left === 1 ? 'attempt' : 'attempts'} left before logins are paused.`,
+      attempts_left: left,
+    });
   }
+  await recordSuccess(M, keys);   // right credentials: clear the counters
   if (user.email_verified === false) {   // old accounts have no value here and are fine
     audit(req, 'login_blocked_unverified', { user_id: user._id });
     return res.status(403).json({

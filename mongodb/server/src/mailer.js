@@ -1,6 +1,6 @@
 // Sends emails over HTTPS (no extra package needed).
 //   sendResetEmail(to, token)    password reset (link valid 1 hour)
-//   sendVerifyEmail(to, token)   sign-up verification (link valid 24 hours)
+//   sendVerifyEmail(to, token, minutes)   sign-up verification (link valid for `minutes`, default 30)
 //
 // Two providers are supported. Brevo is used when BREVO_API_KEY is set, otherwise Resend.
 //   Brevo  (free: 300 emails/day, any recipient, one verified sender address, no domain needed)
@@ -103,17 +103,17 @@ async function sendResetEmail(to, token) {
   });
 }
 
-async function sendVerifyEmail(to, token) {
+async function sendVerifyEmail(to, token, minutes = 30) {
   const link = verifyLink(token);
   await send({
     to,
     subject: 'Verify your ArchiveAuto email',
     devNote: `Verification link for ${to}: ${link}`,
-    text: `Welcome to ArchiveAuto!\n\nConfirm your email address to finish creating your account (valid for 24 hours):\n${link}\n\nThen go back to the app and log in. If you didn't sign up, ignore this email.`,
+    text: `Welcome to ArchiveAuto!\n\nConfirm your email address to finish creating your account (valid for ${minutes} minutes):\n${link}\n\nThen go back to the app and log in. If you didn't sign up, ignore this email.`,
     html: `<p>Welcome to ArchiveAuto!</p>
 <p>Confirm your email address to finish creating your account.</p>
 <p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#111;color:#fff;border-radius:8px;text-decoration:none">Verify my email</a></p>
-<p>This link is valid for 24 hours. After verifying, go back to the app and log in.</p>
+<p>This link is valid for ${minutes} minutes. After verifying, go back to the app and log in.</p>
 <p style="color:#666">If you didn't sign up, you can ignore this email.</p>`,
   });
 }

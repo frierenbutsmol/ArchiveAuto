@@ -159,7 +159,7 @@ const ResetToken = model('ResetToken', new Schema({
   expires_at: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
 }, TS));
 
-// Email-verification tokens (sent at sign-up). Mongo deletes them automatically after 24 hours.
+// Email-verification tokens (sent at sign-up). Mongo deletes them automatically once they expire (30 minutes).
 const VerifyToken = model('VerifyToken', new Schema({
   user_id: owner,
   token_hash: { type: String, required: true, index: true },
@@ -180,8 +180,18 @@ const VehicleCatalog = model('VehicleCatalog', new Schema({
 }, { collection: 'vehicle_catalog', versionKey: false })
   .index({ type: 1, make_key: 1, model_key: 1, year_from: 1 }, { unique: true }));
 
+// Failed-login counters for the escalating lockout (see loginLock.js). One row per key
+// ("e:<email>" or "ip:<address>"); rows delete themselves after 24 hours without activity.
+const LoginAttempt = model('LoginAttempt', new Schema({
+  key: { type: String, required: true, unique: true },
+  failures: { type: Number, default: 0 },
+  level: { type: Number, default: 0 },
+  locked_until: Date,
+  expire_at: { type: Date, index: { expireAfterSeconds: 0 } },
+}, TS));
+
 module.exports = {
   User, Vehicle, MaintenanceRecord, Repair, PartsReplacement,
-  Document: VehicleDocument, ResetToken, VerifyToken, StoredFile, VehicleShare, AuditLog,
+  Document: VehicleDocument, ResetToken, VerifyToken, LoginAttempt, StoredFile, VehicleShare, AuditLog,
   VehicleCatalog,
 };

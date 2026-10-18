@@ -20,6 +20,7 @@ function RecordCard({ title, date, record }) {
       {record.description ? <Text style={ui.cardMeta}>{record.description}</Text> : null}
       {bits.length ? <Text style={ui.cardMuted}>{bits.join('  ·  ')}</Text> : null}
       {record.added_by_name ? <Text style={ui.cardMuted}>Added by {record.added_by_name}</Text> : null}
+      {record.has_receipt ? <Text style={[ui.cardMuted, { color: COLORS.success }]}>Receipt attached</Text> : null}
     </View>
   );
 }

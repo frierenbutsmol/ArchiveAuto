@@ -6,14 +6,16 @@ const isId = (v) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v);
 const pick = (obj, keys) =>
   Object.fromEntries(keys.filter((k) => obj && obj[k] !== undefined).map((k) => [k, obj[k]]));
 
-// Only these fields can be sent by a mechanic (no user_id, added_by, files, ...).
-const MAINTENANCE_FIELDS = ['maintenance_type', 'description', 'service_date', 'mileage', 'cost', 'shop_name', 'parts_replaced', 'notes'];
-const REPAIR_FIELDS = ['repair_type', 'description', 'repair_date', 'mileage', 'cost', 'shop_name', 'notes'];
+// Only these fields can be sent by a mechanic (no user_id, no added_by). A receipt can be attached:
+// it must be a file the mechanic uploaded themselves, and it is handed over to the owner on save.
+const MAINTENANCE_FIELDS = ['maintenance_type', 'description', 'service_date', 'mileage', 'cost', 'shop_name', 'parts_replaced', 'notes', 'proof_file_path', 'proof_file_name'];
+const REPAIR_FIELDS = ['repair_type', 'description', 'repair_date', 'mileage', 'cost', 'shop_name', 'notes', 'proof_file_path', 'proof_file_name'];
 
-// What a mechanic is allowed to see of a record: no owner id, no uploaded files.
+// What a mechanic is allowed to see of a record: no owner id, and no file ids (only whether a
+// receipt is attached).
 const forMechanic = (doc) => {
   const { user_id, proof_file_path, proof_file_name, ...rest } = doc.toJSON();
-  return rest;
+  return { ...rest, has_receipt: !!proof_file_path };
 };
 
 // "demo.mechanic@example.com" -> "de***@example.com"
@@ -168,6 +170,15 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
       const data = pick(req.body, fields);
       if (typeof data[requiredField] !== 'string' || !data[requiredField].trim())
         return res.status(400).json({ error: `${requiredField} is required.` });
+
+      // Optional receipt: only a file the mechanic uploaded themselves can be attached.
+      if (!data.proof_file_path) {
+        delete data.proof_file_path;
+        delete data.proof_file_name;
+      } else if (!isId(data.proof_file_path) || !(await M.StoredFile.exists({ _id: data.proof_file_path, user_id: req.userId }))) {
+        return res.status(400).json({ error: 'The receipt file was not found. Please attach it again.' });
+      }
+
       const record = await Model.create({
         ...data,
         user_id: vehicle.user_id,
@@ -175,7 +186,12 @@ function registerRoleRoutes(app, { M, auth, wrap, audit }) {
         added_by: req.userId,
         added_by_name: req.displayName,
       });
-      audit(req, 'mechanic_record_added', { target_type: typeName, target_id: record._id, detail: { vehicle_id: String(vehicle._id) } });
+      if (data.proof_file_path) {
+        // The receipt now belongs to the vehicle's owner: they can open it, and it is deleted
+        // together with the record. The mechanic no longer has access to the file.
+        await M.StoredFile.updateOne({ _id: data.proof_file_path, user_id: req.userId }, { user_id: vehicle.user_id });
+      }
+      audit(req, 'mechanic_record_added', { target_type: typeName, target_id: record._id, detail: { vehicle_id: String(vehicle._id), receipt: !!data.proof_file_path } });
       res.status(201).json(forMechanic(record));
     });
 

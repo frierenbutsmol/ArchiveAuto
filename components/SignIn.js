@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,22 @@ export default function SignIn({ navigation, route }) {
   // unverified email, no connection.
   const [formError, setFormError] = useState('');
   const [credentialsWrong, setCredentialsWrong] = useState(false);
+
+  // Too many failed logins: the server pauses logins and says for how long. Count it down here.
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!lockedUntil) return undefined;
+    const timer = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= lockedUntil) setLockedUntil(0);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockedUntil]);
+  const secondsLeft = Math.max(0, Math.ceil((lockedUntil - now) / 1000));
+  const locked = lockedUntil > 0 && secondsLeft > 0;
+  const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
   const verifyParam = route?.params?.verifyEmail;
   const mailFailed = route?.params?.emailSent === false;
   const [notice, setNotice] = useState(
@@ -45,7 +61,7 @@ export default function SignIn({ navigation, route }) {
         : {
             type: 'success',
             canResend: false,
-            text: `We sent a verification link to ${verifyParam}. Open it, then log in.`,
+            text: `We sent a verification link to ${verifyParam}. It expires in 30 minutes, so open it soon (check your spam folder too), then log in.`,
           }
       : null
   );
@@ -57,6 +73,7 @@ export default function SignIn({ navigation, route }) {
   const showPasswordError = submitted && !password;
 
   const handleSignIn = async () => {
+    if (locked) return;
     setSubmitted(true);
     setFormError('');
     setCredentialsWrong(false);
@@ -75,6 +92,11 @@ export default function SignIn({ navigation, route }) {
     if (error) {
       if (error.code === 'email_not_verified') {
         setNotice({ type: 'info', canResend: true, text: error.message });
+        return;
+      }
+      if (error.code === 'login_locked') {
+        setLockedUntil(Date.now() + (error.retryAfter || 300) * 1000);
+        setNow(Date.now());
         return;
       }
       if (error.status === 401) setCredentialsWrong(true);   // both fields turn red
@@ -189,7 +211,14 @@ export default function SignIn({ navigation, route }) {
               </TouchableOpacity>
             </View>
             {showPasswordError && <Text style={styles.errorText}>Password is required.</Text>}
-            {!!formError && (
+            {locked && (
+              <FormMessage
+                type="error"
+                text={`Too many failed attempts. Logging in is paused. Try again in ${countdown}.`}
+                style={{ marginTop: SPACING.md }}
+              />
+            )}
+            {!locked && !!formError && (
               <FormMessage type="error" text={formError} style={{ marginTop: SPACING.md }} />
             )}
             {notice && (
@@ -234,13 +263,13 @@ export default function SignIn({ navigation, route }) {
             <TouchableOpacity
               style={[
                 styles.ctaButton,
-                loading && { opacity: 0.6 },
+                (loading || locked) && { opacity: locked ? 0.4 : 0.6 },
               ]}
               onPress={handleSignIn}
               activeOpacity={0.85}
-              disabled={loading}>
+              disabled={loading || locked}>
               <Text style={styles.ctaText}>
-                {loading ? 'Logging In...' : 'LogIn'}
+                {locked ? `Try again in ${countdown}` : loading ? 'Logging In...' : 'LogIn'}
               </Text>
             </TouchableOpacity>
 

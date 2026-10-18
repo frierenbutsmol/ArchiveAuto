@@ -190,6 +190,7 @@ export default function MaintenanceList({ navigation }) {
             item.notes || '',
 
           proofFileId: item.proof_file_path || null,
+          addedBy: item.added_by_name || null,
 
           rawCost:
             item.cost !== null &&
@@ -628,6 +629,14 @@ export default function MaintenanceList({ navigation }) {
 
                 ) : null}
 
+
+                {/* Added by a registered mechanic */}
+                {item.addedBy ? (
+                  <View style={styles.addedByRow}>
+                    <Ionicons name="shield-checkmark" size={14} color={COLORS.primary} />
+                    <Text style={styles.addedByText}>Added by {item.addedBy}</Text>
+                  </View>
+                ) : null}
 
                 {/* RECEIPT */}
 
@@ -1231,6 +1240,22 @@ const styles = StyleSheet.create({
   },
 
 
+  addedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: SPACING.sm,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: RADII.sm,
+    backgroundColor: COLORS.primaryMuted,
+  },
+  addedByText: {
+    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   receiptRow: {
     flexDirection: 'row',
     alignItems: 'center',

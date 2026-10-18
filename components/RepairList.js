@@ -126,6 +126,7 @@ export default function RepairList({ navigation }) {
               : 'No cost',
           hasPhotoProof,
           proofFileId: repair.proof_file_path,
+          addedBy: repair.added_by_name || null,
           proofStatus,
           description:
             repair.notes ||
@@ -342,6 +343,14 @@ export default function RepairList({ navigation }) {
                 <Text style={styles.descText}>
                   {item.description}
                 </Text>
+
+                {/* Added by a registered mechanic */}
+                {item.addedBy ? (
+                  <View style={styles.addedByRow}>
+                    <Ionicons name="shield-checkmark" size={14} color={COLORS.primary} />
+                    <Text style={styles.addedByText}>Added by {item.addedBy}</Text>
+                  </View>
+                ) : null}
 
                 {/* Photo proof indicator */}
                 <TouchableOpacity
@@ -591,6 +600,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginBottom: SPACING.sm,
+  },
+  addedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: SPACING.sm,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: RADII.sm,
+    backgroundColor: COLORS.primaryMuted,
+  },
+  addedByText: {
+    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: '700',
   },
   proofRow: {
     flexDirection: 'row',

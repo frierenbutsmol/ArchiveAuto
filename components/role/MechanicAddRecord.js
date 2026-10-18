@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS } from '../../constants/theme';
 import { api } from '../../lib/api';
 import { ScreenHeader, PrimaryButton, ui } from './RoleUI';
 
 const SERVICE_TYPES = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery', 'Other'];
+const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
+const PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const mimeFromName = (name = '') => {
+  const ext = name.split('.').pop().toLowerCase();
+  return ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
+};
 const todayISO = () => new Date().toISOString().split('T')[0];
 
 const validDate = (v) => {
@@ -30,6 +38,24 @@ export default function MechanicAddRecord() {
   const [shop, setShop] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [proofFile, setProofFile] = useState(null);   // optional receipt / work order
+
+  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  const pickProof = async () => {
+    if (proofFile) { setProofFile(null); return; }
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: PROOF_TYPES, copyToCacheDirectory: true, multiple: false });
+      if (result.canceled) return;
+      const file = result.assets?.[0];
+      if (!file) return;
+      const mime = PROOF_TYPES.includes(file.mimeType) ? file.mimeType : mimeFromName(file.name);
+      if (!mime) return Alert.alert('Unsupported file', 'Please choose a JPG, PNG or PDF.');
+      if (file.size && file.size > MAX_PROOF_BYTES) return Alert.alert('File too large', 'Please choose a file under 8 MB.');
+      setProofFile({ ...file, mime });
+    } catch {
+      Alert.alert('File selection failed', 'Could not select the file.');
+    }
+  };
 
   const save = async () => {
     if (!type.trim()) return Alert.alert('Missing information', isRepair ? 'Enter the repair type.' : 'Choose a service type.');
@@ -51,12 +77,26 @@ export default function MechanicAddRecord() {
     }
 
     setSaving(true);
+    let proofId = null;
+    if (proofFile) {
+      const upload = await api.files.upload(proofFile.uri, { mime: proofFile.mime, name: proofFile.name });
+      if (upload.error) {
+        setSaving(false);
+        return Alert.alert('Upload failed', upload.error.message);
+      }
+      proofId = upload.data.id;
+      body.proof_file_path = proofId;
+      body.proof_file_name = proofFile.name || null;
+    }
     const { error } = isRepair
       ? await api.mechanic.addRepair(vehicleId, body)
       : await api.mechanic.addMaintenance(vehicleId, body);
     setSaving(false);
 
-    if (error) return Alert.alert('Could not save', error.message);
+    if (error) {
+      if (proofId) await api.files.remove(proofId);   // don't leave an orphan upload behind
+      return Alert.alert('Could not save', error.message);
+    }
     navigation.goBack();
   };
 
@@ -100,6 +140,30 @@ export default function MechanicAddRecord() {
 
           <Text style={ui.label}>Notes</Text>
           <TextInput style={[ui.input, ui.inputMulti]} value={notes} onChangeText={setNotes} placeholder="Anything the owner should know" placeholderTextColor={COLORS.textMuted} multiline maxLength={2000} />
+
+          <Text style={ui.label}>Receipt or work order (optional)</Text>
+          <TouchableOpacity
+            onPress={pickProof}
+            activeOpacity={0.8}
+            style={{
+              borderWidth: 1.5,
+              borderStyle: proofFile ? 'solid' : 'dashed',
+              borderColor: proofFile ? COLORS.success : 'rgba(55, 194, 223, 0.4)',
+              borderRadius: 12,
+              paddingVertical: 18,
+              paddingHorizontal: 16,
+              alignItems: 'center',
+              backgroundColor: COLORS.surface,
+            }}
+          >
+            <Ionicons name={proofFile ? 'checkmark-circle' : 'camera-outline'} size={28} color={proofFile ? COLORS.success : COLORS.primary} />
+            <Text style={{ color: proofFile ? COLORS.success : COLORS.primary, fontSize: 13, fontWeight: '600', marginTop: 6, textAlign: 'center' }} numberOfLines={2}>
+              {proofFile ? proofFile.name || 'Receipt attached' : 'Tap to attach a receipt photo or PDF'}
+            </Text>
+            <Text style={{ color: COLORS.textMuted, fontSize: 11, marginTop: 4 }}>
+              {proofFile ? 'Tap again to remove' : 'The owner keeps it with the record'}
+            </Text>
+          </TouchableOpacity>
 
           <PrimaryButton label="Save record" onPress={save} loading={saving} style={{ marginTop: 28 }} />
         </ScrollView>
