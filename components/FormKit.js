@@ -20,6 +20,11 @@ export const cleanAmount = (text) => {
   const int = whole.slice(0, 7);
   return rest.length ? `${int}.${rest.join('').slice(0, 2)}` : int;
 };
+// "3199.5" -> "3,199.5" (what the money box shows; the stored value stays plain digits).
+export const withCommasDecimal = (text) => {
+  const [whole, dec] = String(text || '').split('.');
+  return withCommas(whole) + (dec !== undefined ? `.${dec}` : '');
+};
 export const toNumber = (text) => {
   const n = parseFloat(String(text).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) ? n : 0;
@@ -74,7 +79,7 @@ export function AmountInput({ value, onChangeText, placeholder = '0.00', style, 
         underlineColorAndroid="transparent"
         keyboardType="decimal-pad"
         {...props}
-        value={value}
+        value={withCommasDecimal(value)}
         onChangeText={(t) => onChangeText(cleanAmount(t))}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}

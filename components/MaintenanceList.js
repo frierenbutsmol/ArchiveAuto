@@ -317,11 +317,9 @@ export default function MaintenanceList({ navigation }) {
               style={styles.vehicleSubtitle}
               numberOfLines={1}
             >
-              {selectedVehicle.year
-                ? `${selectedVehicle.year} `
-                : ''}
-              {selectedVehicle.make || ''}
-              {selectedVehicle.model || ''}
+              {[selectedVehicle.year, selectedVehicle.make, selectedVehicle.series]
+                .filter(Boolean)
+                .join(' ')}
             </Text>
           )}
 

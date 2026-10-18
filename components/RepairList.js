@@ -17,10 +17,12 @@ import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api, sortDesc } from '../lib/api';
 import DeleteButton from './DeleteButton';
+import { useBottomInset } from '../lib/useBottomInset';
 
 export default function RepairList({ navigation }) {
   const { useMetric } = useSettings();
   const route = useRoute();
+  const bottomInset = useBottomInset();
 
   const [repairs, setRepairs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,20 +193,23 @@ export default function RepairList({ navigation }) {
           />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>
-          Repair Log
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.headerTitle}>
+            Repair History
+          </Text>
 
-        <TouchableOpacity
-          style={styles.addIconBtn}
-          onPress={handleAddRepair}
-          activeOpacity={0.8}>
-          <Ionicons
-            name="add"
-            size={22}
-            color={COLORS.primary}
-          />
-        </TouchableOpacity>
+          {!!selectedVehicle && (
+            <Text style={styles.vehicleSubtitle} numberOfLines={1}>
+              {[selectedVehicle.year, selectedVehicle.make, selectedVehicle.series]
+                .filter(Boolean)
+                .join(' ')}
+            </Text>
+          )}
+        </View>
+
+        {/* Empty box the size of the back button, so the title stays centered.
+            Adding a repair is done by the floating button below. */}
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -382,6 +387,17 @@ export default function RepairList({ navigation }) {
           </View>
         )}
       </ScrollView>
+
+      {/* Floating add button (same as Maintenance History) */}
+      {!loading && (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: 24 + bottomInset }]}
+          onPress={handleAddRepair}
+          activeOpacity={0.85}>
+          <Ionicons name="add" size={24} color={COLORS.textInverse} />
+          <Text style={styles.fabText}>Add Repair</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -458,18 +474,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  addIconBtn: {
+  headerSpacer: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primaryMuted,
-    justifyContent: 'center',
+  },
+  titleContainer: {
+    flex: 1,
     alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+  },
+  vehicleSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   scrollContent: {
     paddingHorizontal: SPACING.screenPadding,
     paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xxxl,
+    paddingBottom: 110,   // room for the floating button
   },
   summaryCard: {
     flexDirection: 'row',
@@ -625,5 +647,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     marginTop: SPACING.xs,
+  },
+  fab: {
+    position: 'absolute',
+    right: SPACING.screenPadding,
+    bottom: 24,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  fabText: {
+    color: COLORS.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 7,
   },
 });

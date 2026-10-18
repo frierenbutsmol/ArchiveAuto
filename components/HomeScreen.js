@@ -240,7 +240,7 @@ export default function HomeScreen({ navigation, route }) {
     {
       id: 'repairs',
       icon: 'construct-outline',
-      title: 'Repair Log',
+      title: 'Repair History',
       desc: 'Shop & dealer repairs with photo proof',
       count: `${recordCounts.repairs} records`,
       badgeColor: COLORS.success,

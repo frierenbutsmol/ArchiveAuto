@@ -17,9 +17,11 @@ import { useFocusEffect, useRoute } from '@react-navigation/native';
 
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api, sortDesc } from '../lib/api';
+import { useBottomInset } from '../lib/useBottomInset';
 
 export default function VehicleDocuments({ navigation }) {
   const route = useRoute();
+  const bottomInset = useBottomInset();
 
   const [vehicle, setVehicle] = useState(
     route?.params?.vehicle ||
@@ -191,20 +193,23 @@ export default function VehicleDocuments({ navigation }) {
           />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>
-          Vehicle Documents
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.headerTitle}>
+            Vehicle Documents
+          </Text>
 
-        <TouchableOpacity
-          style={styles.addIconBtn}
-          onPress={openAddDocument}
-          activeOpacity={0.8}>
-          <Ionicons
-            name="add"
-            size={22}
-            color={COLORS.primary}
-          />
-        </TouchableOpacity>
+          {!!vehicle && (
+            <Text style={styles.vehicleSubtitle} numberOfLines={1}>
+              {[vehicle.year, vehicle.make, vehicle.series]
+                .filter(Boolean)
+                .join(' ')}
+            </Text>
+          )}
+        </View>
+
+        {/* Empty box the size of the back button, so the title stays centered.
+            Adding a document is done by the big button (empty list) or the floating button. */}
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -393,7 +398,7 @@ export default function VehicleDocuments({ navigation }) {
           </View>
         )}
 
-        {/* The big button is only for the empty state; the "+" in the header covers the rest. */}
+        {/* The big button is only for the empty state; the floating button covers the rest. */}
         {!loading && documents.length === 0 && (
           <TouchableOpacity
             style={styles.ctaButton}
@@ -413,6 +418,17 @@ export default function VehicleDocuments({ navigation }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Floating add button (same as Maintenance History) */}
+      {!loading && documents.length > 0 && (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: 24 + bottomInset }]}
+          onPress={openAddDocument}
+          activeOpacity={0.85}>
+          <Ionicons name="add" size={24} color={COLORS.textInverse} />
+          <Text style={styles.fabText}>Add Document</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -449,19 +465,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  addIconBtn: {
+  headerSpacer: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primaryMuted,
-    justifyContent: 'center',
+  },
+
+  titleContainer: {
+    flex: 1,
     alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+  },
+
+  vehicleSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
 
   scrollContent: {
     paddingHorizontal: SPACING.screenPadding,
     paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xxxl,
+    paddingBottom: 110,   // room for the floating button
   },
 
   noticeCard: {
@@ -622,5 +646,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+
+  fab: {
+    position: 'absolute',
+    right: SPACING.screenPadding,
+    bottom: 24,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+
+  fabText: {
+    color: COLORS.textInverse,
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 7,
   },
 });

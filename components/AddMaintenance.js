@@ -23,7 +23,8 @@ import { parseDateInput } from '../lib/dateParse';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
 import ShopPicker from './ShopPicker';
 import * as DocumentPicker from 'expo-document-picker';
-import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney } from './FormKit';
+import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney, withCommas } from './FormKit';
+import ConfirmCard from './ConfirmCard';
 
 // Fixed height of the app bar itself (status bar space is added via marginTop).
 const TOP_BAR_HEIGHT = 64;
@@ -169,6 +170,13 @@ export default function AddMaintenance() {
 
   const canSave = serviceTypes.length > 0 && hasProvider && (!needsMileage || mileage.trim() !== '');
 
+  // Save button: show the "Save this maintenance?" card first (same idea as Log Repair).
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const handleConfirm = () => {
+    if (!canSave || saving) return;
+    setConfirmOpen(true);
+  };
+
   const handleCancel = () => {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -274,7 +282,7 @@ export default function AddMaintenance() {
         >
           <MaterialIcons name="arrow-back" size={24} color={COLORS.textMuted} />
         </Touchable>
-        <Text style={styles.headerTitle}>Add Record</Text>
+        <Text style={styles.headerTitle}>Log Maintenance</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -287,14 +295,6 @@ export default function AddMaintenance() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Icon + subtitle */}
-          <View style={styles.introBlock}>
-            <View style={styles.iconCircle}>
-              <MaterialIcons name="build" size={32} color={COLORS.primary} />
-            </View>
-            <Text style={styles.introText}>Log maintenance details for your vehicle.</Text>
-          </View>
-
           {/* Form card */}
           <View style={styles.formCard}>
             {/* Service Category */}
@@ -460,7 +460,7 @@ export default function AddMaintenance() {
         <View style={styles.actionArea}>
           <Touchable
             style={[styles.submitButton, (!canSave || saving) && styles.submitButtonDisabled]}
-            onPress={handleAddRecord}
+            onPress={handleConfirm}
             disabled={!canSave || saving}
             rippleColor="rgba(0,0,0,0.15)"
           >
@@ -481,6 +481,26 @@ export default function AddMaintenance() {
           </Touchable>
         </View>
       </KeyboardAvoidingView>
+
+      <ConfirmCard
+        visible={confirmOpen}
+        icon="build"
+        title="Save this maintenance?"
+        headline={serviceTypes.join(', ')}
+        subline={diy ? 'Did it myself' : shopName.trim()}
+        rows={[
+          { label: 'Date', value: date.trim() || todayISO() },
+          ...(needsMileage && mileage ? [{ label: 'Mileage', value: `${withCommas(mileage)} ${MILEAGE_UNIT}` }] : []),
+          ...(totalCost > 0 ? [{ label: 'Total', value: `₱${formatMoney(totalCost)}` }] : []),
+          ...(canAttach && proofFile ? [{ label: 'Receipt', value: 'Attached' }] : []),
+        ]}
+        confirmLabel="Save"
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          handleAddRecord();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -536,29 +556,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xxxl,
+    paddingTop: SPACING.xl,
     paddingBottom: SPACING.xxl,
-  },
-  introBlock: {
-    alignItems: 'center',
-    marginBottom: SPACING.xxl,
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  introText: {
-    color: COLORS.textMuted,
-    fontSize: 16,
-    lineHeight: 24,
-    textAlign: 'center',
   },
   formCard: {
     gap: SPACING.lg,
