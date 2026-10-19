@@ -38,17 +38,14 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "0d382214-dcd5-490d-810f-db53b178029c"
-      }
-    },
-    "owner": "jeppotea",
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/0d382214-dcd5-490d-810f-db53b178029c"
-    }
+    "extra": {
+      "eas": {
+        "projectId": "3ba9bf4d-ed7c-4b70-ab91-2a23cdc5cf29"
+      }
+    },
+    "owner": "thoe"
   }
 }
