@@ -20,9 +20,11 @@ import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/u
 import { api } from '../lib/api';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
 import { formatInteger, formatMoney } from '../lib/numberFormat';
+import { todayLocalISO } from '../lib/dateParse';
 import MechanicPicker from './MechanicPicker';
 import ConfirmCard from './ConfirmCard';
 import * as DocumentPicker from 'expo-document-picker';
+import CameraButton from './CameraButton';
 
 const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
 const PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -140,6 +142,15 @@ export default function AddRepair({ navigation, route }) {
     }
   };
 
+  // Photo taken with the camera (replaces any attachment that is already there).
+  const handleCameraPhoto = (photo) => {
+    if (photo.size && photo.size > MAX_PROOF_BYTES) {
+      Alert.alert('File Too Large', 'Please take the photo again, or choose a file under 8 MB.');
+      return;
+    }
+    setProofFile({ ...photo, mime: photo.mimeType });
+  };
+
   // Save button: explain what is missing, or ask for confirmation before saving.
   const handleConfirm = () => {
     if (saving) return;
@@ -188,7 +199,7 @@ export default function AddRepair({ navigation, route }) {
           vehicle_id:      vehicle.id,
           repair_type:     repairType,
           description:     title.trim(),
-          repair_date:     new Date().toISOString().split('T')[0],
+          repair_date:     todayLocalISO(),   // the phone's own date, not UTC
           mileage:         displayToKm(mileageValue, useMetric),
           cost:            Number.isNaN(costValue) ? null : costValue,
           shop_name:       repairType === 'DIY' ? null : (shopName.trim() || null),
@@ -400,6 +411,14 @@ export default function AddRepair({ navigation, route }) {
                 </Text>
               </View>
             </Touchable>
+
+            {requiresProof && (
+              <CameraButton
+                onPhoto={handleCameraPhoto}
+                label="Take a photo of the receipt"
+                style={{ marginTop: 10 }}
+              />
+            )}
           </View>
 
           {/* Notes */}

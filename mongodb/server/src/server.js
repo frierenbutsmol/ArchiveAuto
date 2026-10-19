@@ -14,6 +14,7 @@ const { keysFor, secondsLocked, recordFailure, recordSuccess, waitText } = requi
 const { makeAuth } = require('./rbac');
 const { registerRoleRoutes } = require('./roleRoutes');
 const { registerCatalogRoutes } = require('./catalogRoutes');
+const { registerProviderRoutes } = require('./providerRoutes');
 const { applySecurity } = require('./security');
 const { makeAudit, registerAuditRoutes } = require('./audit');
 const { validate, schemas, isId } = require('./validate');
@@ -383,6 +384,7 @@ function crud(path, Model, { child = false, schema } = {}) {
 registerRoleRoutes(app, { M, auth, wrap, audit });
 registerAuditRoutes(app, { M, auth, wrap });
 registerCatalogRoutes(app, { M, auth, wrap });   // read-only make/model suggestions
+registerProviderRoutes(app, { M, auth, wrap });  // this user's own shops/mechanics for the provider dropdown
 
 crud('/vehicles', M.Vehicle, { schema: schemas.vehicle });
 crud('/maintenance_records', M.MaintenanceRecord, { child: true, schema: schemas.maintenance });

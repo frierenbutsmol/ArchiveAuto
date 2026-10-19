@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { parseDateInput } from '../lib/dateParse';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
 import ShopPicker from './ShopPicker';
 import * as DocumentPicker from 'expo-document-picker';
+import CameraButton from './CameraButton';
 import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney, withCommas } from './FormKit';
 import ConfirmCard from './ConfirmCard';
 
@@ -111,6 +112,28 @@ export default function AddMaintenance() {
     setServiceTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]));
   const [date, setDate] = useState(todayISO());
   const [mileage, setMileage] = useState('');
+
+  // The vehicle's latest odometer reading is filled in for you; you can still change it.
+  const [currentMileage, setCurrentMileage] = useState(0);   // km
+  const mileageEdited = useRef(false);
+  useEffect(() => {
+    if (!vehicle?.id) return undefined;
+    let alive = true;
+
+    // Fill in what we already know right away, then refresh it from the server.
+    const known = Number(vehicle.current_mileage) || 0;
+    if (known > 0 && !mileageEdited.current) setMileage(String(kmToDisplay(known, useMetric)));
+
+    (async () => {
+      const { data } = await api.get('vehicles', vehicle.id);   // fresh copy, not the one saved on the phone
+      const km = Number(data?.current_mileage ?? known) || 0;
+      if (!alive) return;
+      setCurrentMileage(km);
+      if (km > 0 && !mileageEdited.current) setMileage(String(kmToDisplay(km, useMetric)));
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle?.id]);
   const [laborCost, setLaborCost] = useState('');
   const [partItems, setPartItems] = useState([]);   // [{ key, name, amount }]
   const addPartItem = () =>
@@ -124,15 +147,15 @@ export default function AddMaintenance() {
   const totalCost =
     Math.round((toNumber(laborCost) + partItems.reduce((t, it) => t + toNumber(it.amount), 0)) * 100) / 100;
   const [shopName, setShopName] = useState('');
-  const [diy, setDiy] = useState(false);   // chose "No shop / did it myself"
+  const [diy, setDiy] = useState(false);   // chose "No shop"
   const [proofFile, setProofFile] = useState(null);   // optional receipt / invoice
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   const needsMileage = serviceTypes.some((t) => NEEDS_MILEAGE.includes(t));
-  // The provider is required: pick a registered mechanic, type another shop, or choose DIY.
+  // The provider is required: pick a registered mechanic, type another shop, or choose No shop.
   const hasProvider = diy || shopName.trim() !== '';
-  // A receipt can only be attached to shop / mechanic work, not when you did it yourself.
+  // A receipt can only be attached to shop / mechanic work, not when there is no shop.
   const canAttach = !diy && shopName.trim() !== '';
   useEffect(() => { if (diy) setProofFile(null); }, [diy]);
 
@@ -166,6 +189,16 @@ export default function AddMaintenance() {
     } catch {
       Alert.alert('File Selection Failed', 'Could not select the file.');
     }
+  };
+
+  // Photo taken with the camera (replaces any attachment that is already there).
+  const handleCameraPhoto = (photo) => {
+    if (!canAttach) return;
+    if (photo.size && photo.size > MAX_PROOF_BYTES) {
+      Alert.alert('File Too Large', 'Please take the photo again, or choose a file under 8 MB.');
+      return;
+    }
+    setProofFile({ ...photo, mime: photo.mimeType });
   };
 
   const canSave = serviceTypes.length > 0 && hasProvider && (!needsMileage || mileage.trim() !== '');
@@ -254,6 +287,13 @@ export default function AddMaintenance() {
 
       console.log('Maintenance saved:', data);
 
+      // A higher odometer reading becomes the vehicle's current mileage (same as Add Part).
+      const savedKm = Number.isNaN(mileageValue) ? null : displayToKm(mileageValue, useMetric);
+      if (savedKm != null && savedKm > currentMileage) {
+        const { error: mileageError } = await api.update('vehicles', vehicle.id, { current_mileage: savedKm });
+        if (mileageError) console.error('Mileage update error:', mileageError);   // the record itself is saved
+      }
+
       Alert.alert('Maintenance Saved', 'Your maintenance record has been added.', [
         { text: 'OK', onPress: handleCancel },
       ]);
@@ -340,9 +380,16 @@ export default function AddMaintenance() {
               <Field
                 label={`Current Mileage (${MILEAGE_UNIT})`}
                 required
-                hint="The number on your dashboard right now (up to 999,999)."
+                hint={
+                  currentMileage > 0
+                    ? `Last recorded: ${formatDistance(currentMileage, useMetric)}. Change it if your dashboard shows more.`
+                    : 'The number on your dashboard right now (up to 999,999).'
+                }
               >
-                <MileageInput value={mileage} onChangeText={setMileage} />
+                <MileageInput
+                  value={mileage}
+                  onChangeText={(t) => { mileageEdited.current = true; setMileage(t); }}
+                />
               </Field>
             )}
 
@@ -421,7 +468,7 @@ export default function AddMaintenance() {
                   numberOfLines={2}
                 >
                   {diy
-                    ? 'No receipt needed when you did it yourself'
+                    ? 'No receipt needed when there is no shop'
                     : !canAttach
                     ? 'Choose a service provider first'
                     : proofFile
@@ -434,6 +481,12 @@ export default function AddMaintenance() {
                     : 'Keeps your paperwork with the record (JPG, PNG or PDF, up to 8 MB)'}
                 </Text>
               </TouchableOpacity>
+              <CameraButton
+                disabled={!canAttach}
+                onPhoto={handleCameraPhoto}
+                label="Take a photo of the receipt"
+                style={{ marginTop: 10 }}
+              />
             </Field>
 
             {/* Notes */}
@@ -487,7 +540,7 @@ export default function AddMaintenance() {
         icon="build"
         title="Save this maintenance?"
         headline={serviceTypes.join(', ')}
-        subline={diy ? 'Did it myself' : shopName.trim()}
+        subline={diy ? 'No shop' : shopName.trim()}
         rows={[
           { label: 'Date', value: date.trim() || todayISO() },
           ...(needsMileage && mileage ? [{ label: 'Mileage', value: `${withCommas(mileage)} ${MILEAGE_UNIT}` }] : []),

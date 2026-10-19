@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { api } from '../lib/api';
 import SelectField from './SelectField';
 import { OTHER, withCurrent } from '../constants/vehicleCatalog';
 import { brandChoices, modelChoices } from '../lib/catalogMerge';
+import { FUEL_TYPES, fuelOptionsFor } from '../lib/fuelTypes';
 
 const VEHICLE_TYPES = [
   { id: 'car',        label: 'Car',        icon: 'car'           },
@@ -27,9 +28,6 @@ const VEHICLE_TYPES = [
   { id: 'van',        label: 'Van',        icon: 'van-passenger' },
   { id: 'truck',      label: 'Truck',      icon: 'truck'         },
 ];
-
-// Fuel types for vehicles sold and driven in the Philippines.
-const FUEL_TYPES = ['Gasoline', 'Diesel', 'LPG', 'Hybrid', 'Plug-in Hybrid', 'Electric'];
 
 // The last year in the vehicle catalog data. A model whose range ends here is still on sale,
 // so its year list continues to the current year (otherwise a brand-new car could not be picked).
@@ -112,6 +110,8 @@ export default function AddVehicle() {
     // Older vehicles may have no fuel type ("Not specified"); the user picks one when editing.
     return FUEL_TYPES.includes(saved) ? saved : '';
   });
+  const savedFuel = useRef(fuelType).current;   // what the vehicle had when this screen opened
+  const [showAllFuel, setShowAllFuel] = useState(false);
   const [tankCapacity, setTankCapacity] = useState(
     isEdit && vehicleToEdit?.tankCapacity != null
       ? String(vehicleToEdit.tankCapacity)
@@ -172,6 +172,25 @@ export default function AddVehicle() {
     const nextYears = yearsFor((dbModels || []).find((m) => m.model === nextModel));
     if (nextYears && !nextYears.includes(year)) setYear('');
   };
+
+  // Fuel type comes after make, model and year: it is filled in when the model has only one,
+  // offered from the model's own list when it came in several versions, and left open (all
+  // types) only when we have no data for the model.
+  const modelChosen = brand.trim() !== '' && model.trim() !== '' && /^\d{4}$/.test(year.trim());
+  const fuelInfo = modelChosen ? fuelOptionsFor({ vehicleType, make: brand, model, year }) : null;
+  const restricted = !!fuelInfo && fuelInfo.known && !showAllFuel;
+  const fuelChoices = !fuelInfo ? [] : restricted ? fuelInfo.options : FUEL_TYPES;
+  const autoFuel = restricted && fuelInfo.options.length === 1 ? fuelInfo.options[0] : null;
+
+  // A different make, model or year starts over with that model's own fuel list.
+  useEffect(() => { setShowAllFuel(false); }, [vehicleType, brand, model, year]);
+
+  useEffect(() => {
+    if (!fuelInfo) { setFuelType(''); return; }
+    if (autoFuel) { setFuelType(autoFuel); return; }
+    if (fuelType && !fuelChoices.includes(fuelType)) setFuelType('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelChosen, autoFuel, fuelChoices.join('|')]);
 
   const canSave =
     vehicleType !== '' &&
@@ -355,35 +374,6 @@ export default function AddVehicle() {
             </View>
           </View>
 
-          {/* Fuel Type */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>
-              Fuel Type <Text style={styles.requiredAsterisk}>*</Text>
-            </Text>
-            <View style={styles.fuelTypeRow}>
-              {FUEL_TYPES.map((f) => {
-                const selected = fuelType === f;
-                return (
-                  <Touchable
-                    key={f}
-                    style={[styles.fuelChip, selected && styles.fuelChipSelected]}
-                    onPress={() => setFuelType(f)}
-                    rippleColor="rgba(55, 194, 223, 0.15)"
-                  >
-                    <View style={styles.fuelChipInner}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.fuelChipText, selected && styles.fuelChipTextSelected]}
-                      >
-                        {f}
-                      </Text>
-                    </View>
-                  </Touchable>
-                );
-              })}
-            </View>
-          </View>
-
           {/* Make / Brand: pick from the list */}
           <View style={styles.fieldBlock}>
             <Text style={styles.fieldLabel}>
@@ -451,6 +441,75 @@ export default function AddVehicle() {
                   selectionColor={COLORS.primary}
                 />
               </View>
+            )}
+          </View>
+
+          {/* Fuel Type: decided by the make, model and year above */}
+          <View style={styles.fieldBlock}>
+            <Text style={styles.fieldLabel}>
+              Fuel Type <Text style={styles.requiredAsterisk}>*</Text>
+            </Text>
+
+            {!fuelInfo ? (
+              <View style={styles.fuelPlaceholder}>
+                <Text style={styles.fuelPlaceholderText}>
+                  Choose the make, model and year first. The fuel type for that model will show here.
+                </Text>
+              </View>
+            ) : autoFuel ? (
+              <View style={styles.fuelAuto}>
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fuelAutoValue}>{autoFuel}</Text>
+                  <Text style={styles.fuelHint}>Set automatically for {brand} {model} {year}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.fuelTypeRow}>
+                {fuelChoices.map((f) => {
+                  const selected = fuelType === f;
+                  return (
+                    <Touchable
+                      key={f}
+                      style={[
+                        styles.fuelChip,
+                        fuelChoices.length <= 2 && { width: '48%' },
+                        selected && styles.fuelChipSelected,
+                      ]}
+                      onPress={() => setFuelType(f)}
+                      rippleColor="rgba(55, 194, 223, 0.15)"
+                    >
+                      <View style={styles.fuelChipInner}>
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.fuelChipText, selected && styles.fuelChipTextSelected]}
+                        >
+                          {f}
+                        </Text>
+                      </View>
+                    </Touchable>
+                  );
+                })}
+              </View>
+            )}
+
+            {fuelInfo && !fuelInfo.known && (
+              <Text style={styles.fuelHint}>
+                We don't have fuel data for this model yet, so choose yours.
+              </Text>
+            )}
+            {restricted && !autoFuel && (
+              <Text style={styles.fuelHint}>
+                This model came in more than one fuel type. Choose yours.
+              </Text>
+            )}
+            {isEdit && savedFuel && fuelType && fuelType !== savedFuel && (
+              <Text style={styles.fuelHint}>Changed from {savedFuel} to match this model.</Text>
+            )}
+            {restricted && (
+              <TouchableOpacity onPress={() => setShowAllFuel(true)} activeOpacity={0.7}>
+                <Text style={styles.fuelLink}>Not right? Show all fuel types</Text>
+              </TouchableOpacity>
             )}
           </View>
 
@@ -642,6 +701,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   fuelChipTextSelected: { color: COLORS.primary },
+  fuelPlaceholder: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.input,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    opacity: 0.7,
+  },
+  fuelPlaceholderText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  fuelAuto: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.primaryMuted,
+    borderRadius: RADII.input,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+  },
+  fuelAutoValue: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  fuelHint: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  fuelLink: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+  },
   bottomBlock: {
     paddingHorizontal: SPACING.screenPadding,
     paddingBottom: SPACING.lg,

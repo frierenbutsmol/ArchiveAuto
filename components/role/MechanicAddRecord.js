@@ -3,9 +3,11 @@ import { View, Text, TextInput, ScrollView, TouchableOpacity, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import CameraButton from '../CameraButton';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS } from '../../constants/theme';
 import { api } from '../../lib/api';
+import { todayLocalISO } from '../../lib/dateParse';
 import { ScreenHeader, PrimaryButton, ui } from './RoleUI';
 
 const SERVICE_TYPES = ['Oil Change', 'Tires', 'Brakes', 'Fluids', 'Battery', 'Other'];
@@ -15,7 +17,7 @@ const mimeFromName = (name = '') => {
   const ext = name.split('.').pop().toLowerCase();
   return ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : null;
 };
-const todayISO = () => new Date().toISOString().split('T')[0];
+const todayISO = () => todayLocalISO();   // the phone's own date, not UTC (UTC is a day behind before 8 AM)
 
 const validDate = (v) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -55,6 +57,14 @@ export default function MechanicAddRecord() {
     } catch {
       Alert.alert('File selection failed', 'Could not select the file.');
     }
+  };
+
+  // Photo taken with the camera (replaces any attachment that is already there).
+  const handleCameraPhoto = (photo) => {
+    if (photo.size && photo.size > MAX_PROOF_BYTES) {
+      return Alert.alert('File too large', 'Please take the photo again, or choose a file under 8 MB.');
+    }
+    setProofFile({ ...photo, mime: photo.mimeType });
   };
 
   const save = async () => {
@@ -164,6 +174,7 @@ export default function MechanicAddRecord() {
               {proofFile ? 'Tap again to remove' : 'The owner keeps it with the record'}
             </Text>
           </TouchableOpacity>
+          <CameraButton onPhoto={handleCameraPhoto} label="Take a photo of the receipt" style={{ marginTop: 10 }} />
 
           <PrimaryButton label="Save record" onPress={save} loading={saving} style={{ marginTop: 28 }} />
         </ScrollView>

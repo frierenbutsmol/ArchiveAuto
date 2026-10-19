@@ -153,15 +153,6 @@ export default function GarageScreen({ navigation }) {
             <Text style={styles.topBarTitle}>Garage</Text>
           </View>
         </View>
-        {/* This button used to do nothing. It now adds a vehicle. */}
-        <Touchable
-          style={styles.avatarButton}
-          onPress={() => navigation.navigate('AddVehicle')}
-          borderless
-          rippleColor="rgba(255,255,255,0.15)"
-        >
-          <Ionicons name="add" size={22} color={COLORS.textPrimary} />
-        </Touchable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -332,16 +323,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.15,
     fontFamily: Platform.select({ android: 'sans-serif-medium', default: undefined }),
-  },
-  avatarButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   scrollContent: {
     paddingHorizontal: SPACING.lg,

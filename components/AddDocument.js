@@ -23,6 +23,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api, sortDesc } from '../lib/api';
 import { parseDateInput } from '../lib/dateParse';
+import CameraButton from './CameraButton';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
 const MAX_FILE_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -284,6 +285,15 @@ export default function AddDocument() {
       console.error('Document picker error:', error);
       Alert.alert('File Selection Failed', 'Could not select the document.');
     }
+  };
+
+  // A photo taken with the camera: same size check as a picked file, then used the same way.
+  const handleCameraPhoto = (photo) => {
+    if (photo.size && photo.size > MAX_FILE_BYTES) {
+      Alert.alert('File Too Large', 'Please take the photo again, or choose a file under 8 MB.');
+      return;
+    }
+    setSelectedFile({ ...photo, detectedMimeType: photo.mimeType });
   };
 
   const handleSaveDocument = async () => {
@@ -604,6 +614,12 @@ export default function AddDocument() {
                     {selectedFile ? selectedFile.name : 'Select PDF or photo scan'}
                   </Text>
                 </Touchable>
+                <CameraButton
+                  disabled={saving}
+                  onPhoto={handleCameraPhoto}
+                  label="Take a photo with the camera"
+                  style={{ marginTop: SPACING.sm }}
+                />
                 <Text style={styles.fileHint}>Supported files: PDF, JPG, JPEG, PNG</Text>
 
                 <View style={!canSave && styles.disabled}>

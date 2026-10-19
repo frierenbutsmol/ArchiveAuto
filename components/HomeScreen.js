@@ -799,51 +799,6 @@ export default function HomeScreen({ navigation, route }) {
           ))}
         </View>
 
-        {/* Vehicle Info & Specs */}
-        <View style={styles.extraSection}>
-          <Text
-            style={styles.sectionHeader}
-          >
-            Vehicle Info & Specs
-          </Text>
-
-          <View
-            style={styles.specCard}
-          >
-            <View style={styles.specRow}>
-              <Text
-                style={styles.specLabel}
-              >
-                Vehicle Type
-              </Text>
-
-              <Text
-                style={styles.specValue}
-              >
-                {vehicleType}
-              </Text>
-            </View>
-
-            <View
-              style={styles.specDivider}
-            />
-
-            <View style={styles.specRow}>
-              <Text
-                style={styles.specLabel}
-              >
-                Fuel Type
-              </Text>
-
-              <Text
-                style={styles.specValue}
-              >
-                {fuelType}
-              </Text>
-            </View>
-          </View>
-        </View>
-
         {/* Vehicle History */}
         <View style={styles.extraSection}>
           <Text
@@ -1283,37 +1238,6 @@ const styles = StyleSheet.create({
 
   extraSection: {
     marginBottom: SPACING.xl,
-  },
-
-  specCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADII.card,
-    paddingHorizontal: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-
-  specRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.md,
-  },
-
-  specLabel: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-  },
-
-  specValue: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  specDivider: {
-    height: 1,
-    backgroundColor: COLORS.borderLight,
   },
 
   historyCard: {

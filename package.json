@@ -19,6 +19,7 @@
     "@react-navigation/native-stack": "^6.9.17",
     "expo": "~57.0.26",
     "expo-document-picker": "~57.0.3",
+    "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-updates": "~57.0.26",
