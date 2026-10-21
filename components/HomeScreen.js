@@ -10,6 +10,10 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -106,6 +110,43 @@ export default function HomeScreen({ navigation, route }) {
 
   const [reminder, setReminder] = useState({ status: 'loading' });
   const reminderInfo = reminderView(reminder);
+
+  // Tap the odometer to change just the vehicle's mileage. This is separate from the
+  // maintenance / repair / part records, which keep their own readings.
+  const [odoOpen, setOdoOpen] = useState(false);
+  const [odoText, setOdoText] = useState('');
+  const [odoSaving, setOdoSaving] = useState(false);
+
+  const openOdometer = () => {
+    const km = Number(currentVehicle?.current_mileage) || 0;
+    setOdoText(km > 0 ? String(kmToDisplay(km, useMetric)) : '');
+    setOdoOpen(true);
+  };
+
+  const saveOdometer = async () => {
+    if (!currentVehicle?.id || odoSaving) return;
+    const digits = parseInt(odoText.replace(/[^0-9]/g, ''), 10);
+    if (Number.isNaN(digits)) {
+      Alert.alert('Invalid Odometer', 'Please enter a valid odometer reading.');
+      return;
+    }
+    setOdoSaving(true);
+    try {
+      const { data, error } = await api.update('vehicles', currentVehicle.id, {
+        current_mileage: displayToKm(digits, useMetric),
+      });
+      if (error) {
+        Alert.alert('Save Failed', error.message || 'Could not update the odometer.');
+        return;
+      }
+      setCurrentVehicle((v) => ({ ...v, ...(data || {}), current_mileage: displayToKm(digits, useMetric) }));
+      setOdoOpen(false);
+    } catch {
+      Alert.alert('Save Failed', 'Something went wrong while updating the odometer.');
+    } finally {
+      setOdoSaving(false);
+    }
+  };
 
   // The dot on the bell: only when there is an alert the user hasn't opened yet.
   // Peeks without marking anything as seen, so it clears once the Alerts screen is opened.
@@ -393,6 +434,54 @@ export default function HomeScreen({ navigation, route }) {
         backgroundColor={COLORS.background}
       />
 
+      {/* Update odometer (vehicle mileage only) */}
+      <Modal
+        visible={odoOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOdoOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.odoBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.odoCard}>
+            <Text style={styles.odoTitle}>Update Odometer</Text>
+            <Text style={styles.odoNote}>
+              Changes your vehicle's mileage only. Maintenance and repair records keep their own readings.
+            </Text>
+            <TextInput
+              style={styles.odoInput}
+              value={odoText ? Number(odoText).toLocaleString('en-US') : ''}
+              onChangeText={(t) =>
+                setOdoText(t.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, 6))
+              }
+              placeholder={`Odometer (${distanceUnit(useMetric)})`}
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="number-pad"
+              selectionColor={COLORS.primary}
+              autoFocus
+            />
+            <View style={styles.odoButtons}>
+              <TouchableOpacity
+                style={styles.odoCancel}
+                onPress={() => setOdoOpen(false)}
+                disabled={odoSaving}
+              >
+                <Text style={styles.odoCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.odoSave, (odoSaving || !odoText) && { opacity: 0.5 }]}
+                onPress={saveOdometer}
+                disabled={odoSaving || !odoText}
+              >
+                <Text style={styles.odoSaveText}>{odoSaving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
@@ -544,7 +633,11 @@ export default function HomeScreen({ navigation, route }) {
             </Text>
           </View>
 
-          <View style={styles.infoPill}>
+          <TouchableOpacity
+            style={styles.infoPill}
+            onPress={openOdometer}
+            activeOpacity={0.7}
+          >
             <Ionicons
               name="speedometer-outline"
               size={15}
@@ -556,13 +649,21 @@ export default function HomeScreen({ navigation, route }) {
             >
               {mileage}
             </Text>
-          </View>
+            <Ionicons
+              name="pencil"
+              size={11}
+              color={COLORS.textMuted}
+              style={{ marginLeft: 5 }}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Quick Snapshot */}
         <View style={styles.snapshotGrid}>
-          <View
+          <TouchableOpacity
             style={styles.snapshotCard}
+            onPress={openOdometer}
+            activeOpacity={0.7}
           >
             <View
               style={
@@ -580,6 +681,11 @@ export default function HomeScreen({ navigation, route }) {
               >
                 Odometer
               </Text>
+              <Ionicons
+                name="pencil"
+                size={12}
+                color={COLORS.textMuted}
+              />
             </View>
 
             <Text
@@ -587,7 +693,8 @@ export default function HomeScreen({ navigation, route }) {
             >
               {mileage}
             </Text>
-          </View>
+            <Text style={styles.odoHint}>Tap to update</Text>
+          </TouchableOpacity>
 
           <View
             style={styles.snapshotCard}
@@ -1102,6 +1209,76 @@ const styles = StyleSheet.create({
 
   verifiedIcon: {
     marginLeft: 2,
+  },
+
+  odoHint: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  odoBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  odoCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.card,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  odoTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  odoNote: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: SPACING.md,
+  },
+  odoInput: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADII.input,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+  },
+  odoButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: SPACING.md,
+    marginTop: SPACING.lg,
+  },
+  odoCancel: {
+    paddingHorizontal: SPACING.md,
+    height: 42,
+    justifyContent: 'center',
+  },
+  odoCancelText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  odoSave: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADII.button,
+    paddingHorizontal: SPACING.lg,
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  odoSaveText: {
+    color: COLORS.textInverse,
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   snapshotValue: {

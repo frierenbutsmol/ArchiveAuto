@@ -21,6 +21,8 @@ import SelectField from './SelectField';
 import { OTHER, withCurrent } from '../constants/vehicleCatalog';
 import { brandChoices, modelChoices } from '../lib/catalogMerge';
 import { FUEL_TYPES, fuelOptionsFor } from '../lib/fuelTypes';
+import { useSettings } from '../lib/settings';
+import { kmToDisplay, displayToKm, distanceUnit } from '../lib/units';
 
 const VEHICLE_TYPES = [
   { id: 'car',        label: 'Car',        icon: 'car'           },
@@ -117,6 +119,14 @@ export default function AddVehicle() {
       ? String(vehicleToEdit.tankCapacity)
       : isEdit && vehicleToEdit?.tank_capacity != null
       ? String(vehicleToEdit.tank_capacity)
+      : ''
+  );
+  // The vehicle's own odometer. It is changed here only; maintenance, repair and part
+  // records keep their own readings and never change it. Any number is accepted.
+  const { useMetric } = useSettings();
+  const [mileage, setMileage] = useState(
+    isEdit && Number(vehicleToEdit?.current_mileage) > 0
+      ? String(kmToDisplay(Number(vehicleToEdit.current_mileage), useMetric))
       : ''
   );
   const [saving, setSaving] = useState(false);
@@ -224,7 +234,11 @@ export default function AddVehicle() {
       };
 
       if (isEdit) {
-        const { data, error } = await api.update('vehicles', vehicleToEdit.id, payload);
+        const mileageDigits = parseInt(String(mileage).replace(/[^0-9]/g, ''), 10);
+        const editPayload = Number.isNaN(mileageDigits)
+          ? payload
+          : { ...payload, current_mileage: displayToKm(mileageDigits, useMetric) };
+        const { data, error } = await api.update('vehicles', vehicleToEdit.id, editPayload);
 
         if (error) {
           Alert.alert('Save Failed', error.message);
@@ -355,6 +369,26 @@ export default function AddVehicle() {
               />
             </View>
           </View>
+
+          {/* Odometer: edit only, separate from the maintenance / repair logs */}
+          {isEdit && (
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>
+                Current Mileage ({distanceUnit(useMetric)}) <Text style={styles.optionalTag}>(optional)</Text>
+              </Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 45,000"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={mileage ? Number(mileage).toLocaleString('en-US') : ''}
+                  onChangeText={(t) => setMileage(t.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  selectionColor={COLORS.primary}
+                />
+              </View>
+            </View>
+          )}
 
           {/* Tank Capacity */}
           <View style={styles.fieldBlock}>

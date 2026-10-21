@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
-import { formatDistance, kmToDisplay, distanceUnit } from '../lib/units';
-import { minimumReading, readingProblem, readingToKm } from '../lib/mileageRule';
+import { displayToKm, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
 import { parseDateInput } from '../lib/dateParse';
 import { useActiveVehicle } from '../lib/useActiveVehicle';
@@ -113,29 +112,9 @@ export default function AddMaintenance() {
   const toggleServiceType = (type) =>
     setServiceTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]));
   const [date, setDate] = useState(todayISO());
+  // The odometer reading belongs to this record only. It is not filled in from, compared with,
+  // or saved to the vehicle's own mileage (that is changed from Edit Vehicle).
   const [mileage, setMileage] = useState('');
-
-  // The vehicle's latest odometer reading is filled in for you; you can still change it.
-  const [currentMileage, setCurrentMileage] = useState(0);   // km
-  const mileageEdited = useRef(false);
-  useEffect(() => {
-    if (!vehicle?.id) return undefined;
-    let alive = true;
-
-    // Fill in what we already know right away, then refresh it from the server.
-    const known = Number(vehicle.current_mileage) || 0;
-    if (known > 0 && !mileageEdited.current) setMileage(String(kmToDisplay(known, useMetric)));
-
-    (async () => {
-      const { data } = await api.get('vehicles', vehicle.id);   // fresh copy, not the one saved on the phone
-      const km = Number(data?.current_mileage ?? known) || 0;
-      if (!alive) return;
-      setCurrentMileage(km);
-      if (km > 0 && !mileageEdited.current) setMileage(String(kmToDisplay(km, useMetric)));
-    })();
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicle?.id]);
   const [laborCost, setLaborCost] = useState('');
   const [partItems, setPartItems] = useState([]);   // [{ key, name, amount }]
   const addPartItem = () =>
@@ -156,9 +135,6 @@ export default function AddMaintenance() {
 
   const needsMileage = serviceTypes.some((t) => NEEDS_MILEAGE.includes(t));
 
-  // The reading is filled in with the vehicle's current mileage and cannot go below it (lib/mileageRule.js).
-  const enteredReading = parseInt(mileage.replace(/[^0-9]/g, ''), 10);
-  const mileageIssue = needsMileage ? readingProblem(enteredReading, currentMileage, useMetric) : null;
   // The provider is required: pick a saved shop, type another shop, or choose No shop.
   const hasProvider = diy || shopName.trim() !== '';
   // A receipt can only be attached to shop / mechanic work, not when there is no shop.
@@ -206,7 +182,7 @@ export default function AddMaintenance() {
     setProofFile({ ...photo, mime: photo.mimeType });
   };
 
-  const canSave = serviceTypes.length > 0 && hasProvider && (!needsMileage || mileage.trim() !== '') && !mileageIssue;
+  const canSave = serviceTypes.length > 0 && hasProvider && (!needsMileage || mileage.trim() !== '');
 
   // Save button: show the "Save this maintenance?" card first (same idea as Log Repair).
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -234,12 +210,8 @@ export default function AddMaintenance() {
       Alert.alert('Invalid Odometer', 'Please enter a valid odometer reading.');
       return;
     }
-    if (mileageIssue) {
-      Alert.alert('Invalid Odometer', mileageIssue);
-      return;
-    }
-    // Kilometres to store; a reading left at the vehicle's current mileage is stored exactly as it is.
-    const recordedKm = Number.isNaN(mileageValue) ? null : readingToKm(mileageValue, currentMileage, useMetric);
+    // Stored in kilometres.
+    const recordedKm = Number.isNaN(mileageValue) ? null : displayToKm(mileageValue, useMetric);
 
     const laborValue = toNumber(laborCost);
     const items = partItems
@@ -297,13 +269,6 @@ export default function AddMaintenance() {
       }
 
       console.log('Maintenance saved:', data);
-
-      // A higher odometer reading becomes the vehicle's current mileage (same as Add Part).
-      const savedKm = recordedKm;
-      if (savedKm != null && savedKm > currentMileage) {
-        const { error: mileageError } = await api.update('vehicles', vehicle.id, { current_mileage: savedKm });
-        if (mileageError) console.error('Mileage update error:', mileageError);   // the record itself is saved
-      }
 
       Alert.alert('Maintenance Saved', 'Your maintenance record has been added.', [
         { text: 'OK', onPress: handleCancel },
@@ -389,34 +354,15 @@ export default function AddMaintenance() {
             {/* Mileage (only for categories that have a service interval) */}
             {needsMileage && (
               <Field
-                label={`Current Mileage (${MILEAGE_UNIT})`}
+                label={`Odometer at Service (${MILEAGE_UNIT})`}
                 required
-                hint={
-                  mileageIssue
-                    ? undefined
-                    : currentMileage > 0
-                      ? `Filled in from your vehicle (${formatDistance(currentMileage, useMetric)}). It can't be lower than that.`
-                      : 'The number on your dashboard right now (up to 999,999).'
-                }
+                hint="The odometer reading when this service was done (up to 999,999)."
               >
                 <MileageInput
                   testID="mileage-input"
-                  style={mileageIssue ? styles.mileageInputError : undefined}
                   value={mileage}
-                  onChangeText={(t) => { mileageEdited.current = true; setMileage(t); }}
+                  onChangeText={setMileage}
                 />
-                {mileageIssue ? (
-                  <View style={styles.mileageIssue}>
-                    <Text testID="mileage-issue" style={styles.mileageIssueText}>{mileageIssue}</Text>
-                    <TouchableOpacity
-                      testID="mileage-reset"
-                      onPress={() => setMileage(String(minimumReading(currentMileage, useMetric)))}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.mileageIssueLink}>Use {formatDistance(currentMileage, useMetric)}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
               </Field>
             )}
 
@@ -786,26 +732,6 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderBottomWidth: 2,
     borderBottomColor: COLORS.primary,
-  },
-  mileageInputError: {
-    borderColor: COLORS.danger,
-  },
-  mileageIssue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  mileageIssueText: {
-    flex: 1,
-    color: COLORS.danger,
-    fontSize: 12,
-    marginRight: SPACING.md,
-  },
-  mileageIssueLink: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: '700',
   },
   mileageRow: {
     flexDirection: 'row',

@@ -36,7 +36,8 @@
           "microphonePermission": false,
           "photosPermission": false
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
