@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "ArchiveAuto",
+    "slug": "ArchiveAuto",
+    "version": "1.0.0",
+    "scheme": "archiveauto",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.jeppotea.ArchiveAuto"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "ArchiveAuto uses the camera so you can photograph receipts and vehicle documents.",
+          "microphonePermission": false,
+          "photosPermission": false
+        }
+      ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3ba9bf4d-ed7c-4b70-ab91-2a23cdc5cf29"
+      }
+    },
+    "owner": "thoe"
+  }
+}

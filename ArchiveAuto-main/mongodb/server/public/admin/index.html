@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArchiveAuto Admin</title>
+  <link rel="icon" href="/admin/assets/ArchiveAutoLogo.png" type="image/png">
+  <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="login-screen" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="brand-header">
+        <img src="/admin/assets/ArchiveAutoLogo.png" alt="ArchiveAuto Logo" class="brand-logo">
+        <h1>ArchiveAuto</h1>
+        <span class="brand-sub">Admin Portal</span>
+        <p>Restricted access — authorized administrators only</p>
+      </div>
+      <div id="login-error" class="alert alert-error hidden"></div>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" required autocomplete="username" placeholder="admin@example.com">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••••••">
+        </div>
+        <button type="submit" id="login-btn" class="btn btn-primary btn-block">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <div id="dashboard-screen" class="dashboard-wrapper hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <img src="/admin/assets/ArchiveAutoLogo.png" alt="ArchiveAuto" class="sidebar-logo">
+        <div class="sidebar-brand-text">
+          <span class="sidebar-title">ArchiveAuto</span>
+          <span class="sidebar-badge">Admin</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="overview">
+          <img src="/admin/assets/ic_checklist.png" class="nav-icon-img" alt="">
+          <span>Overview</span>
+        </button>
+        <button class="nav-item" data-tab="users">
+          <img src="/admin/assets/tab_profile.png" class="nav-icon-img" alt="">
+          <span>Users</span>
+        </button>
+        <button class="nav-item" data-tab="catalog">
+          <img src="/admin/assets/tab_home.png" class="nav-icon-img" alt="">
+          <span>Car Catalog</span>
+        </button>
+        <button class="nav-item" data-tab="security">
+          <img src="/admin/assets/ic_notification.png" class="nav-icon-img" alt="">
+          <span>Security Events</span>
+        </button>
+        <button class="nav-item" data-tab="audit">
+          <img src="/admin/assets/ic_support.png" class="nav-icon-img" alt="">
+          <span>Audit Logs</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar">
+            <img src="/admin/assets/tab_profile.png" class="user-avatar-img" alt="">
+          </div>
+          <span id="user-display" class="user-name">Admin</span>
+        </div>
+        <button id="logout-btn" class="btn-logout" title="Sign Out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="sidebar-toggle" id="sidebar-toggle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <span id="page-title" class="page-title">Overview</span>
+        </div>
+        <div class="topbar-right">
+          <button id="topbar-refresh-btn" class="btn-icon-round" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div id="global-alert" class="alert hidden"></div>
+
+        <!-- ====== OVERVIEW ====== -->
+        <section id="tab-overview" class="tab-pane">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon-wrap">
+                <img src="/admin/assets/tab_profile.png" class="stat-img-icon" alt="">
+              </div>
+              <div class="stat-data">
+                <span class="stat-label">Total Users</span>
+                <span id="stat-total-users" class="stat-value">—</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrap">
+                <img src="/admin/assets/vehicle_car.png" class="stat-img-icon" alt="">
+              </div>
+              <div class="stat-data">
+                <span class="stat-label">Total Vehicles</span>
+                <span id="stat-total-vehicles" class="stat-value">—</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrap">
+                <img src="/admin/assets/ic_checklist.png" class="stat-img-icon" alt="">
+              </div>
+              <div class="stat-data">
+                <span class="stat-label">Service Records</span>
+                <span id="stat-total-records" class="stat-value">—</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrap">
+                <img src="/admin/assets/ic_notification.png" class="stat-img-icon" alt="">
+              </div>
+              <div class="stat-data">
+                <span class="stat-label">New Users (7 Days)</span>
+                <span id="stat-new-users" class="stat-value">—</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrap">
+                <img src="/admin/assets/tab_chat.png" class="stat-img-icon" alt="">
+              </div>
+              <div class="stat-data">
+                <span class="stat-label">AI Requests Today</span>
+                <span id="stat-ai-today" class="stat-value">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="charts-row">
+            <div class="chart-card">
+              <div class="chart-card-header">
+                <span class="chart-card-title">User vs Vehicles vs Records</span>
+              </div>
+              <div class="chart-wrap">
+                <canvas id="overview-donut-canvas"></canvas>
+              </div>
+            </div>
+            <div class="chart-card chart-card-wide">
+              <div class="chart-card-header">
+                <span class="chart-card-title">Activity Summary</span>
+              </div>
+              <div class="chart-wrap">
+                <canvas id="overview-bar-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====== USERS ====== -->
+        <section id="tab-users" class="tab-pane">
+          <div class="pane-header">
+            <div>
+              <h2>User Management</h2>
+              <p>Search by name or email, view status, and manage user accounts.</p>
+            </div>
+          </div>
+          <div class="card table-controls">
+            <div class="search-box">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="users-search" placeholder="Search by name or email...">
+            </div>
+            <button id="users-search-btn" class="btn btn-ghost btn-sm">Search</button>
+          </div>
+          <div class="card table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Verified</th>
+                  <th>Joined</th>
+                  <th>Vehicles</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="8" class="text-center text-muted">Enter a search term above to load users.</td></tr>
+              </tbody>
+            </table>
+            <div class="pagination-bar">
+              <button id="users-prev-btn" class="btn btn-ghost btn-sm" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+                Prev
+              </button>
+              <span id="users-page-info" class="page-info">—</span>
+              <button id="users-next-btn" class="btn btn-ghost btn-sm" disabled>
+                Next
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====== CAR CATALOG ====== -->
+        <section id="tab-catalog" class="tab-pane">
+          <div class="pane-header">
+            <div>
+              <h2>Vehicle Catalog Manager</h2>
+              <p>Manage vehicle makes and models used for app suggestions</p>
+            </div>
+            <button id="open-add-catalog-btn" class="btn btn-primary btn-sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Entry
+            </button>
+          </div>
+          <div class="card table-controls">
+            <div class="search-box">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="catalog-search" placeholder="Search by make or model...">
+            </div>
+            <div class="filter-box">
+              <select id="catalog-type-filter">
+                <option value="">All Types</option>
+                <option value="car">Car</option>
+                <option value="motorcycle">Motorcycle</option>
+                <option value="van">Van</option>
+                <option value="truck">Truck</option>
+              </select>
+            </div>
+          </div>
+          <div class="card table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Make</th>
+                  <th>Model</th>
+                  <th>Year Range</th>
+                  <th>Source</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="catalog-tbody">
+                <tr><td colspan="6" class="text-center text-muted">Loading catalog...</td></tr>
+              </tbody>
+            </table>
+            <div class="pagination-bar">
+              <button id="catalog-prev-btn" class="btn btn-ghost btn-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+                Prev
+              </button>
+              <span id="catalog-page-info" class="page-info">Page 1 of 1</span>
+              <button id="catalog-next-btn" class="btn btn-ghost btn-sm">
+                Next
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====== SECURITY EVENTS ====== -->
+        <section id="tab-security" class="tab-pane">
+          <div class="pane-header">
+            <div>
+              <h2>Security Events</h2>
+              <p>Last 20 authentication events — masked IPs, zero emails</p>
+            </div>
+          </div>
+          <div class="card table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Time (UTC)</th>
+                  <th>Event Type</th>
+                  <th>Masked IP</th>
+                  <th>Path</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="security-tbody">
+                <tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ====== AUDIT LOGS ====== -->
+        <section id="tab-audit" class="tab-pane">
+          <div class="pane-header">
+            <div>
+              <h2>Admin Audit Trail</h2>
+              <p>Record of administrative actions, catalog changes, suspensions, and role management</p>
+            </div>
+          </div>
+          <div class="card table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Time (UTC)</th>
+                  <th>Action</th>
+                  <th>Target Type</th>
+                  <th>Target ID</th>
+                  <th>Masked IP</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="audit-tbody">
+                <tr><td colspan="6" class="text-center text-muted">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div><!-- /content-area -->
+    </div><!-- /main-content -->
+  </div><!-- /dashboard-wrapper -->
+
+  <!-- ====== ADD CATALOG MODAL ====== -->
+  <div id="catalog-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Add Vehicle to Catalog</h3>
+        <button id="close-catalog-modal" class="btn-icon-round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="modal-error" class="alert alert-error hidden"></div>
+      <form id="catalog-form">
+        <div class="form-group">
+          <label for="catalog-type-input">Vehicle Type</label>
+          <select id="catalog-type-input" required>
+            <option value="car">Car</option>
+            <option value="motorcycle">Motorcycle</option>
+            <option value="van">Van</option>
+            <option value="truck">Truck</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="catalog-make-input">Make (Manufacturer)</label>
+          <input type="text" id="catalog-make-input" required maxlength="60" placeholder="e.g. Toyota">
+        </div>
+        <div class="form-group">
+          <label for="catalog-model-input">Model</label>
+          <input type="text" id="catalog-model-input" required maxlength="60" placeholder="e.g. Corolla">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="catalog-year-from">Year From</label>
+            <input type="number" id="catalog-year-from" required min="1900" max="2100" placeholder="2010">
+          </div>
+          <div class="form-group">
+            <label for="catalog-year-to">Year To</label>
+            <input type="number" id="catalog-year-to" required min="1900" max="2100" placeholder="2020">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="cancel-catalog-modal" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to Catalog</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====== ACTION REASON MODAL (shared for suspend / restore / unlock) ====== -->
+  <div id="action-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="action-modal-title">Confirm Action</h3>
+        <button id="close-action-modal" class="btn-icon-round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p id="action-modal-desc" class="modal-desc"></p>
+      <div id="action-modal-error" class="alert alert-error hidden"></div>
+      <div class="form-group" style="margin-top:1rem">
+        <label for="action-reason">Written Reason (minimum 5 characters)</label>
+        <textarea id="action-reason" rows="3" maxlength="500" placeholder="Explain the reason for this action..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="cancel-action-modal" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="confirm-action-btn" class="btn btn-primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar overlay for mobile -->
+  <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
+
+  <script src="/admin/chart.js"></script>
+  <script src="/admin/app.js"></script>
+</body>
+</html>
