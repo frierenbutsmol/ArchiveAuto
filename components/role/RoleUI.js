@@ -1,4 +1,4 @@
-// Small shared pieces for the mechanic, admin and sharing screens,
+// Small shared pieces for the admin screens,
 // built from the same theme tokens as the rest of the app.
 import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
@@ -24,8 +24,8 @@ export function ScreenHeader({ title, subtitle, onBack, right }) {
 }
 
 export function RolePill({ role }) {
-  const color = role === 'admin' ? COLORS.danger : role === 'mechanic' ? COLORS.warning : COLORS.primary;
-  const bg = role === 'admin' ? COLORS.dangerMuted : role === 'mechanic' ? COLORS.warningMuted : COLORS.primaryMuted;
+  const color = role === 'admin' ? COLORS.danger : COLORS.primary;
+  const bg = role === 'admin' ? COLORS.dangerMuted : COLORS.primaryMuted;
   return (
     <View style={[ui.pill, { backgroundColor: bg }]}>
       <Text style={[ui.pillText, { color }]}>{ROLE_LABELS[role] || role}</Text>

@@ -1,9 +1,8 @@
 // "Service provider" dropdown for the Add Maintenance and Add Repair forms.
 //
 // The list is PERSONAL to the signed-in user (GET /service-providers):
-//   - shops and mechanics the user typed into their own earlier records, most recent first, and
-//   - mechanics the user shared a vehicle with.
-// Nobody else's names, and no list of every mechanic in the app. A name typed through
+//   - shops the user typed into their own earlier records, most recent first.
+// Nobody else's names. A name typed through
 // "Other shop" is saved with the record, so it appears here the next time.
 //
 //   <ShopPicker value={shopName} onChange={setShopName} none={diy} onNone={setDiy} />
@@ -52,7 +51,6 @@ const formatDay = (iso) => {
 // The small grey line under a name.
 export function captionFor(p) {
   const when = formatDay(p.last_used);
-  if (p.kind === 'mechanic') return p.uses > 0 && when ? `Shared mechanic \u00b7 last used ${when}` : 'Shared mechanic';
   const count = p.uses === 1 ? '1 record' : `${p.uses} records`;
   return when ? `Last used ${when} \u00b7 ${count}` : count;
 }
@@ -148,7 +146,7 @@ export default function ShopPicker({
       >
         <View style={[styles.avatar, selected && styles.avatarSelected]}>
           <Ionicons
-            name={item.kind === 'mechanic' ? 'construct-outline' : 'storefront-outline'}
+            name="storefront-outline"
             size={20}
             color={selected ? COLORS.primary : COLORS.textSecondary}
           />
@@ -157,9 +155,6 @@ export default function ShopPicker({
           <Text style={[styles.rowTitle, selected && styles.rowTitleOn]} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.rowCaption} numberOfLines={1}>{captionFor(item)}</Text>
         </View>
-        {item.kind === 'mechanic' ? (
-          <View style={styles.pill}><Text style={styles.pillText}>Mechanic</Text></View>
-        ) : null}
         {selected ? <Ionicons name="checkmark-circle" size={22} color={COLORS.primary} /> : null}
       </TouchableOpacity>
     );
@@ -178,7 +173,7 @@ export default function ShopPicker({
           })
         : null}
       {visible.length > 0 ? (
-        <Text style={styles.section}>{q ? 'Matches' : 'Your shops & mechanics'}</Text>
+        <Text style={styles.section}>{q ? 'Matches' : 'Your shops'}</Text>
       ) : null}
     </View>
   );
@@ -270,7 +265,7 @@ export default function ShopPicker({
               <View style={styles.sheetHeader}>
                 <View style={styles.sheetHeaderText}>
                   <Text testID="provider-title" style={styles.sheetTitle}>{title}</Text>
-                  <Text style={styles.sheetSubtitle}>Your own shops and mechanics</Text>
+                  <Text style={styles.sheetSubtitle}>Your own shops</Text>
                 </View>
                 <TouchableOpacity
                   testID="provider-close"

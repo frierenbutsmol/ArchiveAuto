@@ -1,6 +1,5 @@
 // Gives an existing account a role. Run on your computer or in the Render shell:
 //   npm run make-admin -- you@example.com            (makes them admin)
-//   npm run make-admin -- shop@example.com mechanic
 require('dotenv').config();
 if (process.env.NODE_ENV !== 'production') require('dns').setServers(['8.8.8.8', '1.1.1.1']);
 const mongoose = require('mongoose');

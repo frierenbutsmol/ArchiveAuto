@@ -7,7 +7,7 @@ import { api } from '../../lib/api';
 import { ROLE_LABELS } from '../../lib/roles';
 import { ScreenHeader, RolePill, PrimaryButton, EmptyState, ErrorBanner, ui } from './RoleUI';
 
-const ROLE_ORDER = ['user', 'mechanic', 'admin'];
+const ROLE_ORDER = ['user', 'admin'];
 
 // Admin: every account, with a role picker and delete.
 export default function AdminUsers() {

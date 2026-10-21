@@ -13,11 +13,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { useSettings } from '../lib/settings';
 import { formatDistance, displayToKm, kmToDisplay, distanceUnit } from '../lib/units';
 import { api } from '../lib/api';
 import DeleteButton from './DeleteButton';
+
+// The vehicle chosen on Home is saved on the phone under this key (see HomeScreen.js).
+// The Garage reads it so it highlights the same vehicle Home is showing.
+const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
 
 // Same type -> icon mapping as AddVehicle.js (MaterialCommunityIcons, since
 // Ionicons has no motorcycle/van/truck icons).
@@ -101,11 +106,23 @@ export default function GarageScreen({ navigation }) {
 
       setVehicles(formattedVehicles);
 
-      // Keep the current selection if it still exists, else use the first vehicle.
+      // Highlight the vehicle that is selected on Home (saved on the phone).
+      let savedId = null;
+      try {
+        const saved = await AsyncStorage.getItem(SELECTED_VEHICLE_KEY);
+        if (saved) savedId = JSON.parse(saved)?.id ?? null;
+      } catch (e) {
+        // a damaged saved value is ignored; fall back below
+      }
+
+      // Order: the saved selection, else the current one, else the first vehicle.
+      // (A saved vehicle that was deleted no longer exists, so it is skipped.)
       setActiveId((currentActiveId) => {
         if (formattedVehicles.length === 0) return null;
-        const stillExists = formattedVehicles.some((v) => v.id === currentActiveId);
-        return stillExists ? currentActiveId : formattedVehicles[0].id;
+        const exists = (id) => id != null && formattedVehicles.some((v) => v.id === id);
+        if (exists(savedId)) return savedId;
+        if (exists(currentActiveId)) return currentActiveId;
+        return formattedVehicles[0].id;
       });
     } catch (error) {
       console.error('Unexpected error loading vehicles:', error);
@@ -120,8 +137,15 @@ export default function GarageScreen({ navigation }) {
     }, [])
   );
 
-  const handleSelectVehicle = (vehicle) => {
+  const handleSelectVehicle = async (vehicle) => {
     setActiveId(vehicle.id);
+
+    // Save it right away so Home and the Garage always agree on the active vehicle.
+    try {
+      await AsyncStorage.setItem(SELECTED_VEHICLE_KEY, JSON.stringify(vehicle.databaseVehicle));
+    } catch (e) {
+      // not fatal: Home saves the selection too
+    }
 
     navigation.navigate('MainTabs', {
       screen: 'Home',
@@ -224,15 +248,6 @@ export default function GarageScreen({ navigation }) {
                   </View>
 
                   <View style={{ alignItems: 'center' }}>
-                    {/* Owner: share this vehicle with a mechanic */}
-                    <TouchableOpacity
-                      onPress={() =>
-                        navigation.navigate('ShareVehicle', { vehicleId: vehicle.id, vehicleName: vehicle.name })
-                      }
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={{ marginBottom: 10 }}>
-                      <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
-                    </TouchableOpacity>
                     {/* Owner: delete this vehicle and everything recorded for it */}
                     <DeleteButton
                       resource="vehicles"

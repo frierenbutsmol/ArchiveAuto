@@ -25,6 +25,7 @@ import { useActiveVehicle } from '../lib/useActiveVehicle';
 import ShopPicker from './ShopPicker';
 import * as DocumentPicker from 'expo-document-picker';
 import CameraButton from './CameraButton';
+import RemoveFileButton from './RemoveFileButton';
 import { Field, BoxInput, AmountInput, MileageInput, toNumber, formatMoney, withCommas } from './FormKit';
 import ConfirmCard from './ConfirmCard';
 
@@ -158,19 +159,18 @@ export default function AddMaintenance() {
   // The reading is filled in with the vehicle's current mileage and cannot go below it (lib/mileageRule.js).
   const enteredReading = parseInt(mileage.replace(/[^0-9]/g, ''), 10);
   const mileageIssue = needsMileage ? readingProblem(enteredReading, currentMileage, useMetric) : null;
-  // The provider is required: pick a registered mechanic, type another shop, or choose No shop.
+  // The provider is required: pick a saved shop, type another shop, or choose No shop.
   const hasProvider = diy || shopName.trim() !== '';
   // A receipt can only be attached to shop / mechanic work, not when there is no shop.
   const canAttach = !diy && shopName.trim() !== '';
   useEffect(() => { if (diy) setProofFile(null); }, [diy]);
 
-  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  // Tap to choose a receipt photo or PDF (tapping again chooses a different one).
+  // The Remove button below the box takes the attachment off.
+  const removeProof = () => setProofFile(null);
+
   const pickProof = async () => {
     if (!canAttach) return;
-    if (proofFile) {
-      setProofFile(null);
-      return;
-    }
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: PROOF_TYPES,
@@ -504,10 +504,13 @@ export default function AddMaintenance() {
                 </Text>
                 <Text style={styles.uploadHint}>
                   {proofFile
-                    ? 'Tap again to remove attachment'
+                    ? 'Tap to choose a different file'
                     : 'Keeps your paperwork with the record (JPG, PNG or PDF, up to 8 MB)'}
                 </Text>
               </TouchableOpacity>
+              {proofFile && canAttach && (
+                <RemoveFileButton onPress={removeProof} label="Remove attachment" />
+              )}
               <CameraButton
                 disabled={!canAttach}
                 onPhoto={handleCameraPhoto}

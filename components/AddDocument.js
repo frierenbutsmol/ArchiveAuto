@@ -24,6 +24,7 @@ import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api, sortDesc } from '../lib/api';
 import { parseDateInput } from '../lib/dateParse';
 import CameraButton from './CameraButton';
+import RemoveFileButton from './RemoveFileButton';
 
 const SELECTED_VEHICLE_KEY = '@archiveauto_selected_vehicle';
 const MAX_FILE_BYTES = 8 * 1024 * 1024;   // same limit as the server
@@ -286,6 +287,9 @@ export default function AddDocument() {
       Alert.alert('File Selection Failed', 'Could not select the document.');
     }
   };
+
+  // Takes the chosen file off again (Save stays disabled until a file is attached).
+  const removeFile = () => setSelectedFile(null);
 
   // A photo taken with the camera: same size check as a picked file, then used the same way.
   const handleCameraPhoto = (photo) => {
@@ -614,6 +618,9 @@ export default function AddDocument() {
                     {selectedFile ? selectedFile.name : 'Select PDF or photo scan'}
                   </Text>
                 </Touchable>
+                {selectedFile && (
+                  <RemoveFileButton onPress={removeFile} disabled={saving} label="Remove file" />
+                )}
                 <CameraButton
                   disabled={saving}
                   onPhoto={handleCameraPhoto}

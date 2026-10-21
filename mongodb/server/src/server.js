@@ -50,10 +50,10 @@ const DUMMY_HASH = bcrypt.hashSync('not-a-real-password-0', 10);
 const auth = makeAuth({ User: M.User, jwt, secret: process.env.JWT_SECRET });
 
 // ---------- Auth ----------
-// Sign-up may only pick 'user' (vehicle owner) or 'mechanic'. Any other value, such as
+// Sign-up may only be 'user' (vehicle owner). Any other value, such as
 // 'admin', is refused and written to the audit log. Admins are made with
 // `npm run make-admin` or by another admin in the dashboard, never at sign-up.
-const SIGNUP_ROLES = ['user', 'mechanic'];
+const SIGNUP_ROLES = ['user'];
 function blockRoleEscalation(req, res, next) {
   const asked = req.body && req.body.role;
   if (asked !== undefined && asked !== null && !SIGNUP_ROLES.includes(asked)) {
@@ -61,7 +61,7 @@ function blockRoleEscalation(req, res, next) {
       target_type: 'user',
       detail: { requested_role: typeof asked === 'string' ? asked : typeof asked },
     });
-    return res.status(400).json({ error: 'Role must be user or mechanic.' });
+    return res.status(400).json({ error: 'Role must be user.' });
   }
   next();
 }
@@ -80,7 +80,7 @@ async function sendVerification(user) {
 
 app.post('/auth/register', blockRoleEscalation, validate(schemas.register), wrap(async (req, res) => {
   const { email, password, display_name } = req.body;
-  const role = req.body.role || 'user';   // already checked: only 'user' or 'mechanic' get here
+  const role = 'user';   // every sign-up is a vehicle owner
   const existing = await M.User.findOne({ email });
   if (existing && existing.email_verified !== false)
     return res.status(409).json({ error: 'Email already registered.' });
@@ -337,7 +337,7 @@ function crud(path, Model, { child = false, schema } = {}) {
   }));
 
   r.post('/', validate(schema), wrap(async (req, res) => {
-    const { id, _id, user_id, added_by, added_by_name, ...data } = req.body;
+    const { id, _id, user_id, ...data } = req.body;
     if (child) {
       const ok = mongoose.isValidObjectId(data.vehicle_id) &&
         await M.Vehicle.exists({ _id: data.vehicle_id, user_id: req.userId });
@@ -350,7 +350,7 @@ function crud(path, Model, { child = false, schema } = {}) {
 
   r.put('/:id', validate(schema, { partial: true }), wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' });
-    const { id, _id, user_id, vehicle_id, added_by, added_by_name, ...data } = req.body;
+    const { id, _id, user_id, vehicle_id, ...data } = req.body;
     const doc = await Model.findOneAndUpdate({ _id: req.params.id, user_id: req.userId }, data, { new: true, runValidators: true });
     if (!doc) return res.status(404).json({ error: 'Not found' });
     audit(req, 'record_updated', { target_type: name, target_id: doc._id });
@@ -370,7 +370,7 @@ function crud(path, Model, { child = false, schema } = {}) {
         ...reps.map((r) => r.proof_file_path),
         ...maints.map((m) => m.proof_file_path),
       ]);
-      await Promise.all([M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document, M.VehicleShare].map((m) => m.deleteMany(q)));
+      await Promise.all([M.MaintenanceRecord, M.Repair, M.PartsReplacement, M.Document].map((m) => m.deleteMany(q)));
     }
     if (Model === M.Document) await deleteStoredFiles(req.userId, [doc.file_path]);
     if (Model === M.Repair || Model === M.MaintenanceRecord) await deleteStoredFiles(req.userId, [doc.proof_file_path]);
@@ -380,11 +380,11 @@ function crud(path, Model, { child = false, schema } = {}) {
   app.use(path, r);
 }
 
-// Sharing, mechanic and admin routes (roles). Registered before the generic CRUD routes.
+// Admin routes (roles). Registered before the generic CRUD routes.
 registerRoleRoutes(app, { M, auth, wrap, audit });
 registerAuditRoutes(app, { M, auth, wrap });
 registerCatalogRoutes(app, { M, auth, wrap });   // read-only make/model suggestions
-registerProviderRoutes(app, { M, auth, wrap });  // this user's own shops/mechanics for the provider dropdown
+registerProviderRoutes(app, { M, auth, wrap });  // this user's own shops for the provider dropdown
 
 crud('/vehicles', M.Vehicle, { schema: schemas.vehicle });
 crud('/maintenance_records', M.MaintenanceRecord, { child: true, schema: schemas.maintenance });

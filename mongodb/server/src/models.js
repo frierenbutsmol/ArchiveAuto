@@ -28,7 +28,7 @@ const User = model('User', clean(new Schema({
   password_hash: String,          // empty for imported profiles that haven't set a password
   display_name: String,           // from profiles.display_name
   avatar_url: String,             // from profiles.avatar_url
-  role: { type: String, enum: ROLES, default: 'user', index: true },   // user | mechanic | admin
+  role: { type: String, enum: ROLES, default: 'user', index: true },   // user | admin
   // false until the link in the sign-up email is opened. No default on purpose: accounts that
   // existed before this field was added have no value and are treated as already verified.
   email_verified: Boolean,
@@ -64,8 +64,6 @@ const maintenanceSchema = new Schema({
   proof_file_path: String,        // id of the uploaded receipt/invoice (see StoredFile)
   proof_file_name: String,
   notes: String,
-  added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
-  added_by_name: String,
 }, TS);
 
 // When the app sends a breakdown, the total is always labour + items, computed here,
@@ -92,8 +90,6 @@ const Repair = model('Repair', clean(new Schema({
   proof_file_path: String,        // id of the uploaded receipt/work-order photo (see StoredFile)
   proof_file_name: String,
   notes: String,
-  added_by: { type: Schema.Types.ObjectId, ref: 'User' },   // set when a mechanic added the record
-  added_by_name: String,
 }, TS)), 'repairs');
 
 const PartsReplacement = model('PartsReplacement', clean(new Schema({
@@ -128,15 +124,6 @@ const StoredFile = model('StoredFile', new Schema({
   size: Number,
   data: { type: Buffer, required: true, select: false },   // not loaded unless asked for
 }, TS), 'files');
-
-// An owner lets a mechanic see one vehicle and add service records to it.
-const vehicleShareSchema = new Schema({
-  owner_id: owner,
-  vehicle_id: vehicleRef,
-  mechanic_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-}, TS);
-vehicleShareSchema.index({ vehicle_id: 1, mechanic_id: 1 }, { unique: true });
-const VehicleShare = model('VehicleShare', clean(vehicleShareSchema), 'vehicle_shares');
 
 // Security events (logins, role changes, deletions, ...). Deleted automatically after 180 days.
 const AuditLog = model('AuditLog', clean(new Schema({
@@ -192,6 +179,6 @@ const LoginAttempt = model('LoginAttempt', new Schema({
 
 module.exports = {
   User, Vehicle, MaintenanceRecord, Repair, PartsReplacement,
-  Document: VehicleDocument, ResetToken, VerifyToken, LoginAttempt, StoredFile, VehicleShare, AuditLog,
+  Document: VehicleDocument, ResetToken, VerifyToken, LoginAttempt, StoredFile, AuditLog,
   VehicleCatalog,
 };

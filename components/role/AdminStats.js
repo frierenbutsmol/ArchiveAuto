@@ -51,7 +51,6 @@ export default function AdminStats() {
             <View style={ui.statGrid}>
               <Stat value={stats.users.total} label="Total accounts" />
               <Stat value={stats.users.user} label="Vehicle owners" />
-              <Stat value={stats.users.mechanic} label="Mechanics" />
               <Stat value={stats.users.admin} label="Admins" />
             </View>
 

@@ -5,8 +5,7 @@ import ShopPicker from './ShopPicker';
 //
 // This is the same dropdown as the one on Add Maintenance (see ShopPicker.js), so both forms
 // show the same personal list from GET /service-providers:
-//   - mechanics the user shared a vehicle with (marked "Mechanic"), and
-//   - shops and mechanics the user typed into their own earlier records.
+//   - shops the user typed into their own earlier records.
 // "Other shop (type the name)" is always there for a new one.
 //
 // There is no "No shop" row here: doing the repair yourself is the DIY repair type on the form,

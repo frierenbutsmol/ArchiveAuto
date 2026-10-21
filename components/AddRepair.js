@@ -25,6 +25,7 @@ import MechanicPicker from './MechanicPicker';
 import ConfirmCard from './ConfirmCard';
 import * as DocumentPicker from 'expo-document-picker';
 import CameraButton from './CameraButton';
+import RemoveFileButton from './RemoveFileButton';
 
 const MAX_PROOF_BYTES = 8 * 1024 * 1024;   // same limit as the server
 const PROOF_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -111,12 +112,11 @@ export default function AddRepair({ navigation, route }) {
   const MAX_ODOMETER_DIGITS = 6;
   const odometerMissing = showErrors && !odometer.trim();
 
-  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  // Tap to choose a receipt photo or PDF (tapping again chooses a different one).
+  // The Remove button below the box takes the attachment off.
+  const removeProof = () => setProofFile(null);
+
   const pickProof = async () => {
-    if (proofFile) {
-      setProofFile(null);
-      return;
-    }
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: PROOF_TYPES,
@@ -406,11 +406,13 @@ export default function AddRepair({ navigation, route }) {
                   {!requiresProof
                     ? 'Choose Official Shop or Manufacturer/Dealer to attach one'
                     : hasPhoto
-                    ? 'Tap again to remove attachment'
+                    ? 'Tap to choose a different file'
                     : 'Proves repairs for warranty & resale value'}
                 </Text>
               </View>
             </Touchable>
+
+            {hasPhoto && <RemoveFileButton onPress={removeProof} label="Remove attachment" />}
 
             {requiresProof && (
               <CameraButton

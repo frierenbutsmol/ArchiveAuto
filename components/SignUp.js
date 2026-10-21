@@ -23,7 +23,6 @@ import FormMessage from './FormMessage';
 export default function SignUp() {
   const navigation = useNavigation();
 
-  const [role, setRole] = useState('user');   // 'user' = vehicle owner, or 'mechanic'
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
@@ -53,12 +52,6 @@ export default function SignUp() {
     setConfirmTouched(false);
     setEmailTaken(false);
     setFormError('');
-  };
-
-  const handleSelectRole = (value) => {
-    if (value === role) return;
-    setRole(value);
-    clearValidation();
   };
 
   useFocusEffect(
@@ -115,7 +108,6 @@ export default function SignUp() {
       email: email.trim(),
       password: password,
       displayName: displayName.trim(),
-      role,
     });
 
     setLoading(false);
@@ -143,7 +135,7 @@ export default function SignUp() {
       return;
     }
 
-    // Owners and mechanics each land on their own dashboard.
+    // Each role lands on its own dashboard.
     navigation.reset({
       index: 0,
       routes: [{ name: routeForRole(data.user.role) }],
@@ -224,44 +216,8 @@ export default function SignUp() {
           {/* Form */}
           <View style={styles.form}>
 
-            {/* Account type: owner or mechanic (admins are never created here) */}
-            <Text style={styles.label}>
-              I am a
-            </Text>
-
-            <View style={styles.roleRow}>
-              {[
-                { value: 'user', label: 'Vehicle Owner', icon: 'car-outline' },
-                { value: 'mechanic', label: 'Mechanic', icon: 'construct-outline' },
-              ].map((opt) => {
-                const active = role === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    activeOpacity={0.85}
-                    onPress={() => handleSelectRole(opt.value)}
-                    style={[styles.roleChip, active && styles.roleChipActive]}
-                  >
-                    <Ionicons
-                      name={opt.icon}
-                      size={20}
-                      color={active ? COLORS.primary : COLORS.textMuted}
-                    />
-                    <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <Text style={styles.roleHint}>
-              {role === 'mechanic'
-                ? 'You will see vehicles that owners share with you and can add service records.'
-                : 'Track your own vehicles, records and reminders.'}
-            </Text>
-
             {/* Display Name */}
-            <Text style={[styles.label, { marginTop: SPACING.lg }]}>
+            <Text style={styles.label}>
               Name
             </Text>
 
@@ -651,45 +607,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginBottom: SPACING.sm,
-  },
-
-  roleRow: {
-    flexDirection: 'row',
-  },
-
-  roleChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 50,
-    marginRight: 8,
-    borderRadius: RADII.input,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceElevated,
-  },
-
-  roleChipActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryMuted,
-  },
-
-  roleChipText: {
-    marginLeft: 8,
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  roleChipTextActive: {
-    color: COLORS.primary,
-  },
-
-  roleHint: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    marginTop: SPACING.sm,
   },
 
   inputRow: {

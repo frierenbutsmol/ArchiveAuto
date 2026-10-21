@@ -16,6 +16,7 @@ import MainTabs from './components/MainTabs';
 import GarageScreen from './components/GarageScreen';
 import AddVehicle from './components/AddVehicle';
 import SettingsScreen from './components/SettingsScreen';
+import EditProfile from './components/EditProfile';
 import InfoScreen from './components/InfoScreen';
 import Notification from './components/Notification';
 import MaintenanceList from './components/MaintenanceList';
@@ -24,11 +25,7 @@ import RepairList from './components/RepairList';
 import AddRepair from './components/AddRepair';
 import VehicleDocuments from './components/VehicleDocuments';
 import AddDocument from './components/AddDocument';
-import MechanicTabs from './components/role/MechanicTabs';
-import MechanicVehicleDetail from './components/role/MechanicVehicleDetail';
-import MechanicAddRecord from './components/role/MechanicAddRecord';
 import AdminTabs from './components/role/AdminTabs';
-import ShareVehicle from './components/role/ShareVehicle';
 import VehicleHistory from './components/VehicleHistory';
 import { routeForRole } from './lib/roles';
 
@@ -40,7 +37,7 @@ installThemedAlert();
 export default function App() {
   const navigationRef = useRef(null);
   // null while we check for a saved login; then the role's start screen
-  // ('MainTabs' | 'MechanicTabs' | 'AdminTabs') or 'SignIn'.
+  // ('MainTabs' | 'AdminTabs') or 'SignIn'.
   const [initialRoute, setInitialRoute] = useState(null);
 
   // Reset links look like: archiveauto://reset-password?token=XXXX
@@ -130,29 +127,8 @@ export default function App() {
         />
 
         <Stack.Screen
-          name="MechanicTabs"
-          component={MechanicTabs}
-        />
-
-        <Stack.Screen
-          name="MechanicVehicleDetail"
-          component={MechanicVehicleDetail}
-        />
-
-        <Stack.Screen
-          name="MechanicAddRecord"
-          component={MechanicAddRecord}
-          options={{ presentation: 'modal' }}
-        />
-
-        <Stack.Screen
           name="AdminTabs"
           component={AdminTabs}
-        />
-
-        <Stack.Screen
-          name="ShareVehicle"
-          component={ShareVehicle}
         />
 
         <Stack.Screen
@@ -179,6 +155,11 @@ export default function App() {
         <Stack.Screen
           name="Settings"
           component={SettingsScreen}
+        />
+
+        <Stack.Screen
+          name="EditProfile"
+          component={EditProfile}
         />
 
         <Stack.Screen

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   StatusBar,
   ScrollView,
@@ -10,10 +9,11 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
+import Avatar from './Avatar';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -26,9 +26,12 @@ export default function ProfileScreen() {
     recordsCount: 0,
   });
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  // Reload every time Profile is shown, so a new name or photo appears after editing.
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
+  );
 
   const loadProfile = async () => {
     try {
@@ -74,16 +77,16 @@ export default function ProfileScreen() {
 
   const menuItems = [
     {
+      id: 'account',
+      icon: 'person-circle-outline',
+      label: 'Account information',
+      onPress: () => navigation.navigate('EditProfile'),
+    },
+    {
       id: 'garage',
       icon: 'car-sport-outline',
       label: 'My Garage',
       onPress: () => navigation.navigate('Garage'),
-    },
-    {
-      id: 'notifications',
-      icon: 'notifications-outline',
-      label: 'Notifications',
-      onPress: () => navigation.navigate('Notification'),
     },
     {
       id: 'settings',
@@ -127,13 +130,7 @@ export default function ProfileScreen() {
 
         {/* Profile Card: Name and email only, 2 stats (Vehicles & Records) */}
         <View style={styles.profileCard}>
-          <View style={styles.avatarCircle}>
-            {user.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
-            ) : (
-              <Ionicons name="person" size={32} color={COLORS.primary} />
-            )}
-          </View>
+          <Avatar value={user.avatarUrl} size={68} style={{ marginBottom: SPACING.md }} />
 
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userEmail}>{user.email}</Text>

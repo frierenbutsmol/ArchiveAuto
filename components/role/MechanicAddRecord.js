@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import CameraButton from '../CameraButton';
+import RemoveFileButton from '../RemoveFileButton';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { COLORS } from '../../constants/theme';
 import { api } from '../../lib/api';
@@ -42,9 +43,11 @@ export default function MechanicAddRecord() {
   const [saving, setSaving] = useState(false);
   const [proofFile, setProofFile] = useState(null);   // optional receipt / work order
 
-  // Tap to choose a receipt photo or PDF; tap again to remove it.
+  // Tap to choose a receipt photo or PDF (tapping again chooses a different one).
+  // The Remove button below the box takes the attachment off.
+  const removeProof = () => setProofFile(null);
+
   const pickProof = async () => {
-    if (proofFile) { setProofFile(null); return; }
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: PROOF_TYPES, copyToCacheDirectory: true, multiple: false });
       if (result.canceled) return;
@@ -171,9 +174,10 @@ export default function MechanicAddRecord() {
               {proofFile ? proofFile.name || 'Receipt attached' : 'Tap to attach a receipt photo or PDF'}
             </Text>
             <Text style={{ color: COLORS.textMuted, fontSize: 11, marginTop: 4 }}>
-              {proofFile ? 'Tap again to remove' : 'The owner keeps it with the record'}
+              {proofFile ? 'Tap to choose a different file' : 'The owner keeps it with the record'}
             </Text>
           </TouchableOpacity>
+          {proofFile && <RemoveFileButton onPress={removeProof} label="Remove attachment" />}
           <CameraButton onPhoto={handleCameraPhoto} label="Take a photo of the receipt" style={{ marginTop: 10 }} />
 
           <PrimaryButton label="Save record" onPress={save} loading={saving} style={{ marginTop: 28 }} />

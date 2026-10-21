@@ -56,6 +56,41 @@ const Touchable = ({
   );
 };
 
+// What the "Next Reminder" banner shows. `r` is { status: 'loading' | 'error' | 'ready', top, more },
+// where `top` is the most urgent alert from lib/alerts.js (the same ones as the bell and the
+// Notifications screen) and `more` is how many other alerts there are.
+function reminderView(r) {
+  if (r.status === 'loading') {
+    return { icon: 'time-outline', color: COLORS.textMuted, value: 'Checking reminders...', sub: '' };
+  }
+  if (r.status === 'error') {
+    return {
+      icon: 'cloud-offline-outline',
+      color: COLORS.textMuted,
+      value: "Couldn't check reminders",
+      sub: 'Check your connection and try again.',
+    };
+  }
+  if (!r.top) {
+    return {
+      icon: 'checkmark-circle-outline',
+      color: COLORS.success,
+      value: 'No upcoming reminders',
+      sub: 'All maintenance schedules are up to date',
+    };
+  }
+  const critical = !!r.top.critical;
+  return {
+    icon: critical ? 'alert-circle-outline' : 'time-outline',
+    color: critical ? COLORS.danger : COLORS.warning,
+    border: critical ? 'rgba(255, 92, 92, 0.4)' : 'rgba(255, 165, 2, 0.4)',
+    value: r.top.title,
+    sub: r.top.message,
+    more: r.more,
+    tappable: true,
+  };
+}
+
 export default function HomeScreen({ navigation, route }) {
   const { useMetric } = useSettings();
   const selected = route?.params?.selectedVehicle;
@@ -69,7 +104,8 @@ export default function HomeScreen({ navigation, route }) {
     documents: 0,
   });
 
-  const [reminder, setReminder] = useState(null);
+  const [reminder, setReminder] = useState({ status: 'loading' });
+  const reminderInfo = reminderView(reminder);
 
   // The dot on the bell: only when there is an alert the user hasn't opened yet.
   // Peeks without marking anything as seen, so it clears once the Alerts screen is opened.
@@ -80,10 +116,19 @@ export default function HomeScreen({ navigation, route }) {
       (async () => {
         try {
           const alertSettings = await loadSettings();
-          const { alerts } = await fetchAlerts(alertSettings, { markSeen: false });
-          if (alive) setShowAlertDot(alerts.some((a) => a.unread));
+          const { alerts, error } = await fetchAlerts(alertSettings, { markSeen: false });
+          if (!alive) return;
+          setShowAlertDot(alerts.some((a) => a.unread));
+          // alerts are sorted most urgent first, so the first one is the "next" reminder
+          setReminder(
+            error
+              ? { status: 'error' }
+              : { status: 'ready', top: alerts[0] || null, more: Math.max(alerts.length - 1, 0) }
+          );
         } catch {
-          if (alive) setShowAlertDot(false);
+          if (!alive) return;
+          setShowAlertDot(false);
+          setReminder({ status: 'error' });
         }
       })();
       return () => { alive = false; };
@@ -582,45 +627,34 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Maintenance Reminder */}
-        <View
-          style={styles.reminderBanner}
+        {/* Next Reminder: the most urgent alert. Tap it to open all of them. */}
+        <TouchableOpacity
+          style={[styles.reminderBanner, reminderInfo.border && { borderColor: reminderInfo.border }]}
+          activeOpacity={reminderInfo.tappable ? 0.8 : 1}
+          onPress={reminderInfo.tappable ? () => navigation.navigate('Notification') : undefined}
         >
-          <View
-            style={
-              styles.reminderIconWrap
-            }
-          >
-            <Ionicons
-              name="checkmark-circle-outline"
-              size={20}
-              color={COLORS.success}
-            />
+          <View style={styles.reminderIconWrap}>
+            <Ionicons name={reminderInfo.icon} size={20} color={reminderInfo.color} />
           </View>
 
-          <View
-            style={styles.reminderTextWrap}
-          >
-            <Text
-              style={styles.reminderLabel}
-            >
-              Next Reminder
+          <View style={styles.reminderTextWrap}>
+            <Text style={styles.reminderLabel}>
+              Next Reminder{reminderInfo.more > 0 ? `  \u00B7  +${reminderInfo.more} more` : ''}
             </Text>
-
-            <Text
-              style={styles.reminderValue}
-            >
-              No upcoming reminders
+            <Text style={styles.reminderValue} numberOfLines={1}>
+              {reminderInfo.value}
             </Text>
-
-            <Text
-              style={styles.reminderSub}
-            >
-              All maintenance schedules are
-              up to date
-            </Text>
+            {!!reminderInfo.sub && (
+              <Text style={styles.reminderSub} numberOfLines={2}>
+                {reminderInfo.sub}
+              </Text>
+            )}
           </View>
-        </View>
+
+          {reminderInfo.tappable && (
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          )}
+        </TouchableOpacity>
 
         {/* Quick Actions */}
         <View

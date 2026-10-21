@@ -6,13 +6,14 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
-  Share,
   StyleSheet,
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { COLORS, SPACING, RADII } from '../constants/theme';
 import { api } from '../lib/api';
 import { useSettings } from '../lib/settings';
@@ -191,22 +192,45 @@ export default function VehicleHistory() {
     return out;
   }, [visible]);
 
-  const shareHistory = async () => {
-    const lines = items.map(
-      (i) =>
-        `${fmtDate(i.date)} | ${KINDS[i.kind].label} | ${i.title}` +
-        (i.mileage ? ` | ${formatDistance(i.mileage, useMetric)}` : '') +
-        (i.cost ? ` | ₱${formatMoney(i.cost)}` : '')
-    );
-    const message =
-      `${vehicleLabel(vehicle)} - vehicle history\n` +
-      `${counts.maintenance} maintenance, ${counts.repair} repairs, ${counts.document} documents\n` +
-      `Total spent: ₱${formatMoney(totalSpent)}\n\n` +
-      lines.join('\n');
+  // Exports the full history as a PDF document and opens the share sheet.
+  const exportHistory = async () => {
+    const esc = (v) =>
+      String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const rows = items
+      .map(
+        (i) =>
+          `<tr><td>${esc(fmtDate(i.date))}</td><td>${esc(KINDS[i.kind].label)}</td>` +
+          `<td>${esc(i.title)}${i.detail ? `<br/><small>${esc(i.detail)}</small>` : ''}</td>` +
+          `<td>${i.mileage ? esc(formatDistance(i.mileage, useMetric)) : ''}</td>` +
+          `<td style="text-align:right">${i.cost ? `₱${esc(formatMoney(i.cost))}` : ''}</td></tr>`
+      )
+      .join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"/>
+      <style>
+        body{font-family:Helvetica,Arial,sans-serif;color:#111;padding:24px}
+        h1{margin:0 0 4px;font-size:22px} p{margin:0 0 4px;color:#444}
+        table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px}
+        th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}
+        th{background:#f3f3f3} small{color:#666}
+      </style></head><body>
+      <h1>${esc(vehicleLabel(vehicle))} - Vehicle History</h1>
+      <p>${counts.maintenance} maintenance, ${counts.repair} repairs, ${counts.document} documents</p>
+      <p><b>Total spent: ₱${esc(formatMoney(totalSpent))}</b></p>
+      <table><thead><tr><th>Date</th><th>Type</th><th>Details</th><th>Mileage</th><th>Cost</th></tr></thead>
+      <tbody>${rows}</tbody></table></body></html>`;
     try {
-      await Share.share({ message, title: `${vehicleLabel(vehicle)} history` });
-    } catch {
-      // The person closed the share sheet; nothing to do.
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `${vehicleLabel(vehicle)} history`,
+        });
+      } else {
+        setError('Sharing is not available on this device.');
+      }
+    } catch (e) {
+      setError(e?.message || 'Could not export the history.');
     }
   };
 
@@ -220,9 +244,9 @@ export default function VehicleHistory() {
         right={
           items.length > 0 ? (
             <TouchableOpacity
-              onPress={shareHistory}
+              onPress={exportHistory}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Share history"
+              accessibilityLabel="Export to document"
             >
               <Ionicons name="share-outline" size={24} color={COLORS.primary} />
             </TouchableOpacity>

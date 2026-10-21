@@ -136,7 +136,6 @@ const schemas = {
     email: { rule: email(), required: true },
     password: { rule: newPassword(), required: true },
     display_name: text({ max: 60 }),
-    role: oneOf(['user', 'mechanic']),            // sign-up choice; 'admin' is never allowed here
   },
   login: {
     email: { rule: text({ max: 254, lower: true }), required: true },
@@ -209,7 +208,7 @@ const schemas = {
   },
 };
 
-// A copy of a schema without some fields (e.g. mechanics: the vehicle comes from the URL, not the body).
+// A copy of a schema without some fields (e.g. when a field comes from the URL, not the body).
 const without = (schema, ...keys) =>
   Object.fromEntries(Object.entries(schema).filter(([k]) => !keys.includes(k)));
 

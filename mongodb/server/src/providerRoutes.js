@@ -3,11 +3,9 @@
 //   GET /service-providers  ->  [{ name, kind, last_used, uses }, ...]   for the signed-in user ONLY
 //
 // The list is personal. It is built from what is already saved in the database for THIS user:
-//   kind "recent"    a shop or mechanic name the user typed into one of their own maintenance or
+//   kind "recent"    a shop name the user typed into one of their own maintenance or
 //                    repair records (newest first; the same name typed twice is merged)
-//   kind "mechanic"  a mechanic account the user shared one of their vehicles with
-// Other users' shops, and mechanics this user never linked, are never returned, and only names are
-// sent (no emails, no ids).
+// Other users' shops are never returned, and only names are sent (no emails, no ids).
 const RECORD_SCAN_LIMIT = 500;   // newest records read per collection
 const MAX_RESULTS = 30;
 
@@ -18,10 +16,9 @@ const tidy = (s) => String(s).replace(/\s+/g, ' ').trim();
 function registerProviderRoutes(app, { M, auth, wrap }) {
   app.get('/service-providers', auth, wrap(async (req, res) => {
     const mine = { user_id: req.userId, shop_name: { $nin: [null, ''] } };
-    const [maintenance, repairs, shares] = await Promise.all([
+    const [maintenance, repairs] = await Promise.all([
       M.MaintenanceRecord.find(mine).select('shop_name created_at').sort({ created_at: -1 }).limit(RECORD_SCAN_LIMIT).lean(),
       M.Repair.find(mine).select('shop_name created_at').sort({ created_at: -1 }).limit(RECORD_SCAN_LIMIT).lean(),
-      M.VehicleShare.find({ owner_id: req.userId }).select('mechanic_id').lean(),
     ]);
 
     const byKey = new Map();
@@ -39,21 +36,6 @@ function registerProviderRoutes(app, { M, auth, wrap }) {
       } else {
         cur.uses += 1;
         if (when && (!cur.last || when > cur.last)) { cur.last = when; cur.name = name; }   // newest spelling wins
-      }
-    }
-
-    // 2) mechanics this user shared a vehicle with (their own saved links)
-    const mechanicIds = [...new Set(shares.map((s) => String(s.mechanic_id)))];
-    if (mechanicIds.length > 0) {
-      const mechanics = await M.User.find({ _id: { $in: mechanicIds }, role: 'mechanic' }).select('display_name').lean();
-      for (const m of mechanics) {
-        if (typeof m.display_name !== 'string') continue;
-        const name = tidy(m.display_name);
-        const key = nameKey(name);
-        if (!key) continue;
-        const cur = byKey.get(key);
-        if (cur) { cur.kind = 'mechanic'; cur.name = name; }
-        else byKey.set(key, { name, kind: 'mechanic', last: null, uses: 0 });
       }
     }
 

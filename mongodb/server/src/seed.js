@@ -59,28 +59,8 @@ function readProfiles(file) {
     console.log('Demo account already exists.');
   }
 
-  // 3) Demo mechanic + admin for local testing only. On a real server, create admins with:
+  // Demo mechanic and demo admin accounts were removed. On a real server, create admins with:
   //    npm run make-admin -- you@example.com
-  if (process.env.NODE_ENV !== 'production') {
-    const demoHash = await bcrypt.hash('demo12345', 10);
-    for (const [email, name, role] of [
-      ['mechanic@archiveauto.com', 'Demo Mechanic', 'mechanic'],
-      ['admin@archiveauto.com', 'Demo Admin', 'admin'],
-    ]) {
-      if (!(await M.User.findOne({ email }))) {
-        await M.User.create({ email, display_name: name, role, password_hash: demoHash });
-        console.log(`Demo ${role} created: ${email} / demo12345`);
-      }
-    }
-    // Share the demo vehicle with the demo mechanic so the mechanic role has something to show.
-    const owner = await M.User.findOne({ email: 'demo@archiveauto.com' });
-    const mechanic = await M.User.findOne({ email: 'mechanic@archiveauto.com' });
-    const vehicle = owner && (await M.Vehicle.findOne({ user_id: owner._id }));
-    if (vehicle && mechanic && !(await M.VehicleShare.findOne({ vehicle_id: vehicle._id, mechanic_id: mechanic._id }))) {
-      await M.VehicleShare.create({ owner_id: owner._id, vehicle_id: vehicle._id, mechanic_id: mechanic._id });
-      console.log('Demo vehicle shared with the demo mechanic.');
-    }
-  }
 
   console.log('Done.');
   await mongoose.disconnect();

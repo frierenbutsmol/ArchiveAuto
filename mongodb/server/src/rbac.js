@@ -1,9 +1,8 @@
-// Role-based access control (RBAC): the three roles and the two middlewares.
+// Role-based access control (RBAC): the two roles and the two middlewares.
 //
 //   user      manages their own vehicles and records (every account starts here)
-//   mechanic  can see vehicles that owners shared with them and add service records
 //   admin     manages accounts and roles; cannot read owners' private records
-const ROLES = ['user', 'mechanic', 'admin'];
+const ROLES = ['user', 'admin'];
 
 // Checks the login token, then loads the user from the database so that role
 // changes and deleted accounts take effect immediately (the token only holds the id).
@@ -25,7 +24,7 @@ function makeAuth({ User, jwt, secret }) {
   };
 }
 
-// Use after `auth`: requireRole('admin') or requireRole('mechanic', 'admin').
+// Use after `auth`: requireRole('admin').
 function requireRole(...allowed) {
   return (req, res, next) => {
     if (!allowed.includes(req.role)) {
