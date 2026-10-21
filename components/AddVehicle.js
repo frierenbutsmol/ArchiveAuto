@@ -114,13 +114,6 @@ export default function AddVehicle() {
   });
   const savedFuel = useRef(fuelType).current;   // what the vehicle had when this screen opened
   const [showAllFuel, setShowAllFuel] = useState(false);
-  const [tankCapacity, setTankCapacity] = useState(
-    isEdit && vehicleToEdit?.tankCapacity != null
-      ? String(vehicleToEdit.tankCapacity)
-      : isEdit && vehicleToEdit?.tank_capacity != null
-      ? String(vehicleToEdit.tank_capacity)
-      : ''
-  );
   // The vehicle's own odometer. It is changed here only; maintenance, repair and part
   // records keep their own readings and never change it. Any number is accepted.
   const { useMetric } = useSettings();
@@ -219,10 +212,6 @@ export default function AddVehicle() {
         return;
       }
 
-      const parsedTankCapacity = parseFloat(
-        String(tankCapacity).replace(/[^0-9.]/g, '')
-      );
-
       const payload = {
         vehicle_type:  vehicleType,
         make:          brand.trim(),
@@ -230,7 +219,6 @@ export default function AddVehicle() {
         year:          parseInt(year, 10),
         nickname:      nickname.trim() || `${brand.trim()} ${model.trim()}`,
         fuel_type:     fuelType,
-        tank_capacity: Number.isNaN(parsedTankCapacity) ? null : parsedTankCapacity,
       };
 
       if (isEdit) {
@@ -389,24 +377,6 @@ export default function AddVehicle() {
               </View>
             </View>
           )}
-
-          {/* Tank Capacity */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>
-              Tank Capacity (L) <Text style={styles.optionalTag}>(optional)</Text>
-            </Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Leave blank if you're not sure"
-                placeholderTextColor={COLORS.textMuted}
-                value={tankCapacity}
-                onChangeText={(t) => setTankCapacity(t.replace(/[^0-9.]/g, ''))}
-                keyboardType="decimal-pad"
-                selectionColor={COLORS.primary}
-              />
-            </View>
-          </View>
 
           {/* Make / Brand: pick from the list */}
           <View style={styles.fieldBlock}>
